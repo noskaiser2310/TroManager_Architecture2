@@ -38,6 +38,51 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+Desktop.ini
 
 # Custom Folders
 temp/
+scratch/
+
+# Build & Packaging
+build/
+dist/
+*.egg
+*.egg-info/
+wheels/
+*.whl
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Testing & Coverage
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.pytest_cache/
+.tox/
+.mypy_cache/
+.hypothesis/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Docker
+.docker/
+docker-compose.override.yml
+
+# Secrets & Keys
+*.pem
+*.key
+secrets/
+.secret
+
+# Local database data
+database/pg_data/
+*.sqlite3
