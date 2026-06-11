@@ -1,7 +1,0 @@
-=== CONTRACT: Thông tin hợp đồng của tôi ===
-Answer: Hệ thống đang xử lý yêu cầu phức tạp. Vui lòng liên hệ trực tiếp quản lý qua số ${LANDLORD_PHONE} để được hỗ trợ nhanh nhất.
-System: system2 | Conf: 1.0
-Tools: get_contract_status
-Actions: 
-Latency: 1171ms
----
