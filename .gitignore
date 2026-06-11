@@ -86,3 +86,11 @@ secrets/
 # Local database data
 database/pg_data/
 *.sqlite3
+
+# Local/Personal Project files
+PROJECT_STATUS.md
+docs/
+diagrams/
+tests/
+test_ui.html
+pytest.ini
