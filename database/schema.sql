@@ -64,6 +64,7 @@ CREATE TABLE user_profiles (
     communication_preference communication_enum DEFAULT 'zalo',
     tone_preference tone_preference_enum DEFAULT 'professional',
     notification_opt_out JSONB DEFAULT '[]',  -- ["birthday", "marketing"]
+    personalization_profile JSONB DEFAULT '{}', -- SOTA Persona Optimizer data
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

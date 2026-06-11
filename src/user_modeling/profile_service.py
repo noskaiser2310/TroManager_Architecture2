@@ -27,6 +27,7 @@ class UserProfile:
     communication_preference: str
     tone_preference: str
     notification_opt_out: list[str]
+    personalization_profile: dict
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -44,6 +45,7 @@ class UserProfile:
             "communication_preference": self.communication_preference,
             "tone_preference": self.tone_preference,
             "notification_opt_out": self.notification_opt_out,
+            "personalization_profile": self.personalization_profile,
             "is_active": self.is_active,
         }
 
@@ -65,7 +67,7 @@ class ProfileService:
             tenant_id, full_name, phone_number, email, zalo_id,
             room_id, lease_start, lease_end,
             communication_preference, tone_preference,
-            notification_opt_out, is_active,
+            notification_opt_out, personalization_profile, is_active,
             created_at, updated_at
         FROM user_profiles
         WHERE tenant_id = $1 AND is_active = TRUE
@@ -113,7 +115,7 @@ class ProfileService:
             "full_name", "phone_number", "email", "zalo_id",
             "room_id", "lease_start", "lease_end",
             "communication_preference", "tone_preference",
-            "notification_opt_out", "is_active",
+            "notification_opt_out", "personalization_profile", "is_active",
         }
         safe_updates = {k: v for k, v in updates.items() if k in allowed_fields}
         
@@ -160,6 +162,17 @@ class ProfileService:
     
     def _row_to_profile(self, row) -> UserProfile:
         """Convert asyncpg.Record to UserProfile."""
+        import json
+        
+        # Parse JSONB fields if they come as string, else keep as is (asyncpg handles JSONB to string usually)
+        opt_out = row["notification_opt_out"]
+        if isinstance(opt_out, str):
+            opt_out = json.loads(opt_out)
+            
+        pers_profile = row.get("personalization_profile", "{}")
+        if isinstance(pers_profile, str):
+            pers_profile = json.loads(pers_profile)
+
         return UserProfile(
             tenant_id=row["tenant_id"],
             full_name=row["full_name"],
@@ -171,7 +184,8 @@ class ProfileService:
             lease_end=row["lease_end"],
             communication_preference=row["communication_preference"],
             tone_preference=row["tone_preference"],
-            notification_opt_out=row["notification_opt_out"] or [],
+            notification_opt_out=opt_out or [],
+            personalization_profile=pers_profile or {},
             is_active=row["is_active"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],

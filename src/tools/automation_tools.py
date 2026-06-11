@@ -369,7 +369,67 @@ async def schedule_room_viewing(tenant_id: int, room_id: int, datetime_str: str)
         return f"Lỗi: {str(e)}"
 
 
-# ============ Export ============
+# ============ Tool 6: update_user_preference (Hierarchical Memory) ============
+
+class UpdateUserPreferenceInput(BaseModel):
+    tenant_id: int = Field(..., description="ID khách thuê")
+    category: str = Field("preferences", description="Phân loại: demographics, personality_traits, preferences, hoặc interaction_patterns")
+    preference_key: str = Field(..., description="Key cần cập nhật (ví dụ: communication_tone, active_hours, occupation)")
+    preference_value: str = Field(..., description="Giá trị mới")
+
+@tool(args_schema=UpdateUserPreferenceInput)
+async def update_user_preference(tenant_id: int, category: str, preference_key: str, preference_value: str) -> str:
+    """
+    Cập nhật trực tiếp một sở thích/thói quen của khách thuê vào Core Memory (personalization_profile).
+    Dùng khi khách có yêu cầu rõ ràng như "từ nay hãy xưng em với tôi", "đừng nhắn tôi buổi sáng".
+    """
+    from ..core import get_db_pool
+    import json
+    
+    try:
+        pool = get_db_pool()
+        async with pool.acquire() as conn:
+            # Lấy profile hiện tại
+            row = await conn.fetchrow(
+                "SELECT personalization_profile FROM user_profiles WHERE tenant_id = $1", 
+                tenant_id
+            )
+            if not row:
+                return f"Không tìm thấy tenant {tenant_id}."
+                
+            profile = row['personalization_profile']
+            if isinstance(profile, str):
+                profile = json.loads(profile)
+            if not profile:
+                profile = {}
+                
+            # Đảm bảo category tồn tại
+            if category not in profile:
+                profile[category] = {}
+                
+            # Cập nhật
+            profile[category][preference_key] = preference_value
+            
+            # Lưu lại
+            await conn.execute(
+                "UPDATE user_profiles SET personalization_profile = $1 WHERE tenant_id = $2",
+                json.dumps(profile, ensure_ascii=False), tenant_id
+            )
+            
+            # Log
+            await _log_behavior(
+                tenant_id, "preference_updated",
+                f"Updated {category}.{preference_key} to {preference_value}",
+                {"category": category, "key": preference_key, "value": preference_value}
+            )
+            
+            return f"Đã cập nhật sở thích '{preference_key}' = '{preference_value}' thành công vào Core Memory."
+            
+    except Exception as e:
+        logger.exception(f"update_user_preference error: {e}")
+        return f"Lỗi cập nhật sở thích: {str(e)}"
+
+
 
 AUTOMATION_TOOLS = [
     send_zalo,
@@ -377,4 +437,5 @@ AUTOMATION_TOOLS = [
     create_maintenance_ticket,
     send_payment_reminder,
     schedule_room_viewing,
+    update_user_preference,
 ]

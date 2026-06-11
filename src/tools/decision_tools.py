@@ -328,6 +328,169 @@ async def compare_rooms(room_id_1: int, room_id_2: int) -> str:
         return f"Lỗi khi so sánh phòng: {str(e)}"
 
 
+# ============ Tool 5: recommend_renewal ============
+
+class RecommendRenewalInput(BaseModel):
+    tenant_id: int = Field(..., description="ID khách thuê cần gia hạn hợp đồng")
+
+@tool(args_schema=RecommendRenewalInput)
+async def recommend_renewal(tenant_id: int) -> str:
+    """
+    Phân tích rủi ro và giá trị của khách hàng để đưa ra chiến lược gia hạn hợp đồng (Renewal Strategy).
+    Trả về định dạng JSON chứa risk_level, customer_value, churn_risk, persona, và recommended_actions.
+    """
+    import json
+    from datetime import date
+    from dateutil.relativedelta import relativedelta
+    from ..core import get_db_pool
+
+    try:
+        pool = get_db_pool()
+        async with pool.acquire() as conn:
+            # 1. Get user profile and lease info
+            tenant = await conn.fetchrow("""
+                SELECT lease_start, personalization_profile
+                FROM user_profiles
+                WHERE tenant_id = $1
+            """, tenant_id)
+
+            if not tenant:
+                return json.dumps({"error": f"Không tìm thấy tenant {tenant_id}"})
+
+            lease_start = tenant['lease_start']
+            profile_json = tenant['personalization_profile']
+            if isinstance(profile_json, str):
+                profile_json = json.loads(profile_json)
+            elif profile_json is None:
+                profile_json = {}
+
+            # 2. Payment Risk
+            late_payments = await conn.fetchval("""
+                SELECT COUNT(*) FROM invoices
+                WHERE tenant_id = $1 
+                  AND (status = 'overdue' OR paid_date > due_date)
+            """, tenant_id)
+
+            payment_risk = "LOW"
+            payment_score = 1.0
+            if late_payments >= 3:
+                payment_risk = "HIGH"
+                payment_score = 0.0
+            elif late_payments > 0:
+                payment_risk = "MEDIUM"
+                payment_score = 0.5
+
+            # 3. Customer Value (Months Stayed)
+            months_stayed = 0
+            customer_value = "LOW"
+            cv_score = 0.0
+            if lease_start:
+                delta = relativedelta(date.today(), lease_start)
+                months_stayed = delta.years * 12 + delta.months
+                
+                if months_stayed > 24:
+                    customer_value = "VIP"
+                    cv_score = 1.0
+                elif months_stayed >= 12:
+                    customer_value = "HIGH"
+                    cv_score = 0.8
+                elif months_stayed >= 6:
+                    customer_value = "MEDIUM"
+                    cv_score = 0.5
+
+            # 4. Churn Risk
+            complaints = await conn.fetchval("""
+                SELECT COUNT(*) FROM behavior_logs
+                WHERE tenant_id = $1 
+                  AND action_type IN ('noise_complaint', 'maintenance_request')
+                  AND timestamp > CURRENT_DATE - INTERVAL '60 days'
+            """, tenant_id)
+
+            churn_risk = "LOW"
+            churn_risk_inverse = 1.0
+            if complaints >= 5:
+                churn_risk = "HIGH"
+                churn_risk_inverse = 0.0
+            elif complaints >= 2:
+                churn_risk = "MEDIUM"
+                churn_risk_inverse = 0.5
+
+            # 5. Preference (Persona)
+            prefs = profile_json.get("preferences", {})
+            primary_concerns = prefs.get("primary_concerns", [])
+            
+            persona = []
+            persona_match_score = 0.5 # Default
+            if "Giá cả" in primary_concerns:
+                persona.append("PRICE_SENSITIVE")
+            if "An ninh" in primary_concerns:
+                persona.append("SECURITY")
+            if "Yên tĩnh" in primary_concerns:
+                persona.append("QUIET")
+                
+            if persona:
+                persona_match_score = 1.0
+
+            # 6. Framework Logic
+            renewal_score = (
+                0.35 * payment_score +
+                0.25 * cv_score +
+                0.25 * churn_risk_inverse +
+                0.15 * persona_match_score
+            )
+
+            tier = "D"
+            if renewal_score >= 0.8:
+                tier = "A" # VIP Retain
+            elif renewal_score >= 0.6:
+                tier = "B" # Standard Retain
+            elif renewal_score >= 0.4:
+                tier = "C" # Incentive Retain
+
+            recommended_actions = []
+
+            # Tier logic
+            if payment_risk == "HIGH":
+                recommended_actions.append("[RỦI RO THANH TOÁN] Tòa trống nhiều: Gia hạn nhưng tăng cọc 1 tháng.")
+                recommended_actions.append("[RỦI RO THANH TOÁN] Tòa đang full: Không giảm giá, cân nhắc từ chối gia hạn.")
+            else:
+                if tier == "A":
+                    recommended_actions.append("[VIP RETAIN] Ưu tiên giữ giá cũ, chuyển phòng tốt hơn, hoặc tặng dịch vụ miễn phí.")
+                elif tier == "B":
+                    recommended_actions.append("[STANDARD RETAIN] Tặng giá trị cộng thêm (Miễn phí giữ xe, vệ sinh).")
+                elif tier == "C":
+                    if "PRICE_SENSITIVE" in persona:
+                        recommended_actions.append("[INCENTIVE RETAIN] Khách nhạy cảm giá: Tặng voucher 500k hoặc giảm giá 5% trực tiếp (phương án cuối).")
+                    else:
+                        recommended_actions.append("[INCENTIVE RETAIN] Tặng voucher dịch vụ.")
+
+            # Preference logic
+            if "SECURITY" in persona:
+                recommended_actions.append("[SỞ THÍCH] Nhấn mạnh hệ thống camera, bảo vệ 24/7, khóa từ.")
+            if "QUIET" in persona:
+                recommended_actions.append("[SỞ THÍCH] Đề xuất đổi sang phòng tầng cao, góc cuối hành lang, xa thang máy.")
+
+            if churn_risk == "HIGH":
+                recommended_actions.append("[CHÚ Ý] Khách khiếu nại nhiều (Churn Risk cao). Phải hỏi thăm & giải quyết dứt điểm phàn nàn trước khi đàm phán.")
+
+            result = {
+                "risk_level": payment_risk,
+                "customer_value": customer_value,
+                "churn_risk": churn_risk,
+                "persona": persona,
+                "renewal_score": round(renewal_score, 2),
+                "retention_tier": tier,
+                "recommended_actions": recommended_actions
+            }
+
+            return json.dumps(result, ensure_ascii=False, indent=2)
+
+    except Exception as e:
+        logger.exception(f"recommend_renewal error: {e}")
+        import json
+        return json.dumps({"error": f"Lỗi: {str(e)}"}, ensure_ascii=False)
+
+
 # ============ Export ============
 
 DECISION_TOOLS = [
@@ -335,4 +498,5 @@ DECISION_TOOLS = [
     calc_rent,
     recommend_transfer,
     compare_rooms,
+    recommend_renewal,
 ]

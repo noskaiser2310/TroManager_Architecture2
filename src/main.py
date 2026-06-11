@@ -306,6 +306,12 @@ async def lifespan(app: FastAPI):
         llm_client=get_llm_client("pro"),
         conversation_memory=container.conversation_memory,
     )
+    
+    # 11.5 Injection cho Golden Time Delivery
+    container.event_dispatcher.set_dependencies(
+        profile_service=container.profile_service,
+        cron_scheduler=container.cron_scheduler,
+    )
     if config.get("cron", {}).get("enabled", True):
         container.cron_scheduler.start()
         logger.info("Cron scheduler started")
