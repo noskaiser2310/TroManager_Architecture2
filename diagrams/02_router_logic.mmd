@@ -1,0 +1,47 @@
+flowchart TD
+    Start([Request đến]) --> Check1{source == CRON?}
+    
+    Check1 -->|Yes| ToS2[→ System 2<br/>priority: HIGH]
+    Check1 -->|No| Check2{Empty query?}
+    
+    Check2 -->|Yes| ToS1A[→ System 1<br/>fallback msg]
+    Check2 -->|No| Check3{Quá ngắn<br/>lt 3 chars?}
+    
+    Check3 -->|Yes| ToS1B[→ System 1]
+    Check3 -->|No| Check4{Quá dài<br/>gt 500 chars?}
+    
+    Check4 -->|Yes| ToS2B[→ System 2<br/>cần context]
+    Check4 -->|No| Classify[Keyword Classifier]
+    
+    Classify --> Match1{Sensitive<br/>keywords?}
+    Match1 -->|Yes| ToS2C[→ System 2<br/>priority: NORMAL]
+    Match1 -->|No| Match2{Complex<br/>keywords?}
+    
+    Match2 -->|Yes| Check5{Confidence<br/>gt threshold?}
+    Match2 -->|No| Check6{Contains<br/>money amount?}
+    
+    Check5 -->|Yes| ToS2D[→ System 2]
+    Check5 -->|No| ToS1C[→ System 1]
+    
+    Check6 -->|Yes| ToS2E[→ System 2]
+    Check6 -->|No| ToS1D[→ System 1<br/>default]
+    
+    ToS1A --> End([Return RouteDecision])
+    ToS1B --> End
+    ToS1C --> End
+    ToS1D --> End
+    ToS2 --> End
+    ToS2B --> End
+    ToS2C --> End
+    ToS2D --> End
+    ToS2E --> End
+    
+    classDef decision fill:#fff9c4,stroke:#f57f17
+    classDef system1 fill:#c8e6c9,stroke:#2e7d32
+    classDef system2 fill:#ffcdd2,stroke:#c62828
+    classDef start fill:#e1f5ff,stroke:#01579b
+    
+    class Start,End start
+    class Check1,Check2,Check3,Check4,Match1,Match2,Check5,Check6,Classify decision
+    class ToS1A,ToS1B,ToS1C,ToS1D system1
+    class ToS2,ToS2B,ToS2C,ToS2D,ToS2E system2

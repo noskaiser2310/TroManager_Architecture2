@@ -1,0 +1,19 @@
+=== ROOM: Phòng 101 còn trống không? ===
+Answer: Chào anh Nguyễn Văn Minh, rất vui được hỗ trợ anh!
+
+Về yêu cầu của anh đối với **Phòng 101**, tôi xin thông tin đến anh như sau:
+
+Hiện tại, hệ thống ghi nhận phòng 101 **đang trống**. Đây là một căn phòng có vị trí khá thuận lợi và nhận được sự quan tâm từ nhiều cư dân.
+
+Vì anh là một khách hàng rất uy tín, luôn thanh toán đúng hạn và có ý thức giữ gìn không gian sống tốt, tôi rất sẵn lòng hỗ trợ anh trong quá trình tìm hiểu hoặc chuyển đổi sang phòng này.
+
+Anh có muốn tôi thực hiện các bước tiếp theo như:
+1. **Đặt lịch hẹn** để anh đến xem trực tiếp phòng 101 không?
+2. **Cung cấp thông tin chi tiết** về giá thuê và các tiện ích đi kèm của phòng 101?
+
+Anh cho tôi biết ý muốn của mình nhé!
+System: system2 | Conf: 0.0
+Tools: 
+Actions: 
+Latency: 1563ms
+---

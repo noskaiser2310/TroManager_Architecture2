@@ -1,0 +1,1 @@
+{tenant_name} {tone} {lease_end} {payment_delay_days} {memories} {behavior_summary} {query} {history_context}

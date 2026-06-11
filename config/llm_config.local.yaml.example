@@ -1,0 +1,15 @@
+# LLM Config - Local Override (gitignored)
+# Copy file llm_config.yaml thành file này và điền giá trị thực tế
+# File này KHÔNG được commit lên git
+
+llm:
+  base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+  api_key: "YOUR_GEMINI_API_KEY_HERE"
+  flash_model: "gemini-3.0-flash"
+  pro_model: "gemini-3.0-pro"
+
+embedding:
+  base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+  api_key: "YOUR_GEMINI_API_KEY_HERE"
+  model: "text-embedding-004"
+  dimension: 3072

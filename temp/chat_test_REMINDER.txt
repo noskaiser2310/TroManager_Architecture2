@@ -1,0 +1,15 @@
+=== REMINDER: Tạo nhắc nhở đóng tiền nhà cuối tháng ===
+Answer: Chào anh Nguyễn Văn Minh, tôi đã ghi nhận yêu cầu của anh.
+
+Để hỗ trợ anh tốt nhất, tôi xin phép được nhắc nhở anh về việc thanh toán tiền thuê nhà như sau:
+
+*   **Nội dung:** Nhắc nhở đóng tiền thuê nhà tháng hiện tại.
+*   **Thời hạn:** Vui lòng hoàn tất thanh toán trước ngày cuối cùng của tháng.
+*   **Thông tin hóa đơn:** Nếu anh cần xem chi tiết các khoản phí trong hóa đơn tháng này, anh có thể yêu cầu tôi tra cứu giúp bằng cách cung cấp tháng cụ thể (ví dụ: 2026-06).
+
+Anh có cần tôi hỗ trợ thêm thông tin gì về hóa đơn hay chính sách thanh toán không ạ?
+System: system2 | Conf: 1.0
+Tools: 
+Actions: 
+Latency: 1547ms
+---

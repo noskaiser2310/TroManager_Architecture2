@@ -1,0 +1,119 @@
+# =====================================================================
+# LLM Configuration (TroManager)
+# =====================================================================
+# File riêng để cấu hình LLM - tách biệt khỏi config.yaml chính
+# User sẽ tự điền API key, URL, model names
+# =====================================================================
+# HƯỚNG DẪN:
+# 1. Copy file này thành `llm_config.local.yaml` (gitignored)
+# 2. Điền các giá trị thực tế
+# 3. Set environment variable LLM_CONFIG_PATH trỏ tới file local
+#    (hoặc để mặc định trỏ tới file này)
+# =====================================================================
+
+llm:
+  # ---------------------------------------------------------------
+  # Provider: "google" (Gemini native) hoặc "openai_compatible"
+  # ---------------------------------------------------------------
+  provider: "openai_compatible"
+  
+  # ---------------------------------------------------------------
+  # Base URL cho LLM API
+  # Google Gemini OpenAI-compatible: https://generativelanguage.googleapis.com/v1beta/openai/
+  # Google Gemini native: https://generativelanguage.googleapis.com/v1beta
+  # OpenAI: https://api.openai.com/v1
+  # Custom proxy/relay: your-proxy-url
+  # ---------------------------------------------------------------
+  base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+  
+  # ---------------------------------------------------------------
+  # API Key
+  # Cách 1: Điền trực tiếp (không khuyến nghị cho production)
+  # Cách 2: Dùng ${ENV_VAR} để load từ environment
+  # ---------------------------------------------------------------
+  api_key: "${GEMINI_API_KEY}"
+  
+  # ---------------------------------------------------------------
+  # Model names
+  # - flash_model: dùng cho System 1 (nhanh, rẻ)
+  # - pro_model: dùng cho System 2 (mạnh, đắt)
+  # ---------------------------------------------------------------
+  flash_model: "gemma-4-26b-a4b-it"        # bản flash (System 1)
+  pro_model: "gemini-3.1-flash-lite"       # bản pro (System 2)
+  
+  # ---------------------------------------------------------------
+  # Request defaults
+  # ---------------------------------------------------------------
+  request_timeout: 60  # seconds
+  max_retries: 3
+  retry_delay: 1.0  # seconds
+
+  # Default max_tokens cho generation (override per-request nếu cần)
+  default_max_tokens: 8192
+
+  # Strip <thought>...</thought> blocks từ thinking models (vd gemma-4-26b-a4b-it)
+  # Mặc định: true. Set false để giữ nguyên thought (vd khi debug)
+  strip_thought: true
+  
+  # ---------------------------------------------------------------
+  # Rate limiting
+  # ---------------------------------------------------------------
+  rate_limit:
+    requests_per_minute: 60
+    tokens_per_minute: 1000000
+
+# =====================================================================
+# Embedding Configuration
+# =====================================================================
+embedding:
+  # Có thể dùng provider khác với LLM (rẻ hơn)
+  provider: "openai_compatible"
+  base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+  api_key: "${GEMINI_API_KEY}"
+  
+  # Model embedding
+  # - gemini-embedding-2 (Google, mới nhất) - đang dùng
+  # - text-embedding-004 (Google, 768 dim) - không khả dụng qua embedContent
+  # - text-embedding-3-small (OpenAI, 1536 dim)
+  # - nomic-embed-text (local, 768 dim)
+  model: "gemini-embedding-2"
+  dimension: 3072
+  
+  # Batch size khi encode nhiều texts
+  batch_size: 32
+  
+  # Cache embeddings (theo hash của text)
+  enable_cache: true
+  cache_backend: "memory"  # memory, redis, file
+
+# =====================================================================
+# Advanced (optional)
+# =====================================================================
+advanced:
+  # Safety settings cho Gemini
+  safety_settings:
+    harassment: "BLOCK_NONE"
+    hate_speech: "BLOCK_NONE"
+    sexually_explicit: "BLOCK_NONE"
+    dangerous_content: "BLOCK_NONE"
+  
+  # Generation config defaults
+  generation:
+    top_p: 0.95
+    top_k: 40
+    # Có thể thêm các params khác
+
+# =====================================================================
+# Cách sử dụng:
+# =====================================================================
+# Trong code:
+#   from src.llm.llm_client import LLMClient
+#   client = LLMClient()  # Auto-load từ config
+#   response = await client.generate(prompt="...")
+#
+# Hoặc với config path tùy chỉnh:
+#   client = LLMClient(config_path="path/to/llm_config.local.yaml")
+#
+# Để test mà không cần API key thật, có thể dùng biến:
+#   export LLM_DRY_RUN=true  # Sẽ log request thay vì gọi API thật
+# =====================================================================

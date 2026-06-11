@@ -1,0 +1,27 @@
+=== TENANTS: Danh sách khách thuê ===
+Answer: Chào anh Nguyễn Văn Minh, rất vui được hỗ trợ anh!
+
+Dưới đây là thông tin chi tiết về hồ sơ khách thuê của anh trong hệ thống:
+
+### **Thông tin khách hàng: Nguyễn Văn Minh**
+*   **Trạng thái:** Khách hàng thân thiết, có trách nhiệm cao.
+*   **Lịch sử thanh toán:**
+    *   Thanh toán đúng hạn: 2 lần
+    *   Thanh toán trễ: 0 lần
+    *   Trung bình trễ: 0.0 ngày
+*   **Hoạt động khác:**
+    *   Yêu cầu sửa chữa: 2 lần (Luôn chủ động báo cáo kịp thời)
+    *   Khiếu nại tiếng ồn: 0 lần
+*   **Tương tác gần nhất:** 2026-06-11 23:36:20
+
+---
+
+**Ghi chú từ hệ thống:**
+Anh Minh là một khách thuê rất uy tín, luôn có ý thức giữ gìn không gian sống và thanh toán đúng hạn. Hiện tại, anh đang quan tâm đến việc chuyển đổi phòng và đã tìm hiểu thông tin về phòng 101.
+
+Anh có cần tôi hỗ trợ thêm thông tin gì về việc chuyển phòng hay các thủ tục liên quan không ạ?
+System: system2 | Conf: 0.0
+Tools: 
+Actions: 
+Latency: 1639ms
+---

@@ -1,0 +1,24 @@
+=== TENANT LIST: Liệt kê khách thuê ===
+Answer: Dưới đây là thông tin chi tiết về khách thuê **Nguyễn Văn Minh** dựa trên dữ liệu bạn đã cung cấp:
+
+### **Thông tin khách thuê: Nguyễn Văn Minh**
+*   **Trạng thái:** Thân thiện
+*   **Ngày kết thúc hợp đồng:** 2026-12-31
+*   **Đánh giá chung:** Khách rất thân thiện và hay chào hỏi.
+
+---
+
+### **Lịch sử thanh toán & Tương tác**
+*   **Thanh toán đúng hạn:** 2 lần
+*   **Thanh toán trễ:** 0 lần
+*   **Trung bình trễ:** 0.0 ngày
+*   **Lưu ý:** Mặc dù khách có thái độ tốt, nhưng cần lưu ý khách thường hay quên đóng tiền vào ngày 5 hàng tháng.
+
+### **Hoạt động khác**
+*   **Yêu cầu sửa chữa:** 2 lần
+*   **Khiếu nại tiếng ồn:** 0 lần
+*   **Tương tác gần nhất:** 2026-06-10 22:40:02
+System: system2 | Conf: 0.0
+Tools: 
+Actions: 
+---

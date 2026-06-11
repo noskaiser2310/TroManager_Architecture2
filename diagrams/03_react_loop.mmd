@@ -1,0 +1,58 @@
+stateDiagram-v2
+    [*] --> ContextBuild
+    
+    ContextBuild: Context Injection
+    note right of ContextBuild
+        - Read user_profiles
+        - Aggregate behavior_logs
+        - Vector search user_embeddings
+    end note
+    
+    ContextBuild --> LoopStart
+    
+    LoopStart --> Thought
+    
+    Thought: Thought: Analyze problem
+    note right of Thought
+        LLM reasons about what to do
+    end note
+    
+    Thought --> DecisionCheck{Action needed?}
+    
+    DecisionCheck --> FinalAnswer: No more tools
+    DecisionCheck --> ToolCall: Yes
+    
+    ToolCall: Tool Call
+    note right of ToolCall
+        - Validate input schema
+        - Check sensitive (approval?)
+        - Execute tool
+    end note
+    
+    ToolCall --> Observation
+    
+    Observation: Observation: Tool result
+    Observation --> IterCheck
+    
+    IterCheck{Iteration < 4?}
+    IterCheck --> Thought: Yes
+    IterCheck --> LoopBreaker: No
+    
+    LoopBreaker: Loop Breaker
+    note right of LoopBreaker
+        - Log behavior
+        - Return fallback message
+    end note
+    
+    FinalAnswer: Final Answer
+    note right of FinalAnswer
+        - Format with tone
+        - Personalize if possible
+        - Log to conversation_history
+    end note
+    
+    FinalAnswer --> LogBehavior
+    LoopBreaker --> LogBehavior
+    
+    LogBehavior: Log behavior
+    LogBehavior --> [*]

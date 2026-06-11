@@ -1,0 +1,47 @@
+# Python dependencies cho TroManager
+# Chạy: pip install -r requirements.txt
+
+# Web framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+
+# Database
+asyncpg>=0.29.0
+psycopg2-binary>=2.9.9  # For sync operations nếu cần
+pgvector>=0.2.0
+
+# LLM
+openai>=1.0.0  # Compatible với Google Gemini qua OpenAI-compatible endpoint
+google-generativeai>=0.3.0  # Optional: nếu muốn dùng native Gemini SDK
+
+# LangChain / Agent
+langchain>=0.1.0
+langchain-core>=0.1.0
+langchain-community>=0.0.0
+
+# RAG / Knowledge
+llama-index>=0.10.0
+llama-index-vector-stores-postgres>=0.0.0
+sentence-transformers>=2.2.0  # Backup embedding option
+
+# Notifications
+httpx>=0.25.0
+twilio>=8.0.0  # Optional, for SMS
+
+# Scheduling
+apscheduler>=3.10.0
+
+# Utils
+python-dotenv>=1.0.0
+pyyaml>=6.0
+tenacity>=8.2.0  # Retry logic
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0
+
+# Dev tools
+black>=23.0.0
+ruff>=0.1.0

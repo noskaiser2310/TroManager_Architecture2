@@ -1,0 +1,24 @@
+=== ROOM LIST: Danh sách tất cả phòng trọ ===
+Answer: Chào bạn, dưới đây là danh sách thông tin chi tiết về khách thuê **Nguyễn Văn Minh** mà bạn đã cung cấp:
+
+### Thông tin khách thuê: Nguyễn Văn Minh
+*   **Ngày hết hạn hợp đồng:** 2026-12-31
+*   **Trạng thái:** 0 (Đang thuê)
+*   **Đánh giá chung:** Khách thuê rất thân thiện, hay chào hỏi.
+
+### Lịch sử thanh toán & Tương tác:
+*   **Thanh toán đúng hạn:** 2 lần
+*   **Thanh toán trễ:** 0 lần
+*   **Trung bình trễ:** 0.0 ngày
+*   **Yêu cầu sửa chữa:** 2 lần
+*   **Khiếu nại tiếng ồn:** 0 lần
+*   **Tương tác gần nhất:** 2026-06-10 22:39:44
+
+**Lưu ý từ hệ thống:**
+*   Mặc dù dữ liệu ghi nhận "Thanh toán trễ: 0 lần", nhưng trong phần ghi chú có đề cập: *"Khách hay quên đóng tiền vào ngày 5 hàng tháng"*. Bạn nên lưu ý nhắc nhở nhẹ nhàng khách vào các ngày gần sát hạn thanh toán để tránh việc khách quên.
+
+Hiện tại hệ thống chỉ ghi nhận thông tin của khách thuê này. Nếu bạn có thêm các phòng trọ khác hoặc danh sách khách hàng khác cần nhập liệu, vui lòng cung cấp thêm để tôi hỗ trợ quản lý nhé!
+System: system2 | Conf: 0.0
+Tools: 
+Actions: 
+---
