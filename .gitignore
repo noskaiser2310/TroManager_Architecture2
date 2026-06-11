@@ -86,7 +86,6 @@ secrets/
 # Local database data
 database/pg_data/
 *.sqlite3
-database/seed_data.sql
 
 # Local/Personal Project files
 PROJECT_STATUS.md
