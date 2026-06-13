@@ -9,6 +9,8 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+from .context import current_tenant_id
+
 # ============ DB Pool ============
 
 _db_pool = None
@@ -48,8 +50,6 @@ def get_knowledge_lookup():
         raise RuntimeError(
             "Knowledge lookup not initialized. "
             "Call set_knowledge_lookup() in app lifespan startup."
-        )
-    return _knowledge_lookup
 
 
 # ============ Notifications ============

@@ -1,5 +1,5 @@
 """
-SMS Client - Real implementation qua Twilio hoặc provider khác.
+SMS Client using Twilio or other providers.
 """
 
 from __future__ import annotations

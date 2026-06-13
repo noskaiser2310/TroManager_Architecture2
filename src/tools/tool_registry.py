@@ -29,16 +29,16 @@ INTENT_TOOLKIT_MAP = {
     # Rooms
     "room_recommendation": ["decision", "knowledge"],
     "room_transfer": ["decision", "knowledge", "automation"],
-    "room_inquiry": ["knowledge"],
+    "room_inquiry": ["decision", "knowledge"],
     
     # Contract
     "contract_inquiry": ["knowledge"],
     "contract_renewal": ["knowledge", "decision", "automation"],
     
-    # General
+    # General - luôn có knowledge tools để AI tra cứu nếu cần
     "policy_question": ["knowledge"],
     "general_chat": [],
-    "greeting": [],
+    "greeting": ["knowledge"],
     
     # Background events
     "background_event_invoice_overdue": ["knowledge", "automation"],

@@ -80,7 +80,7 @@ embedding:
   dimension: 3072
   
   # Batch size khi encode nhiều texts
-  batch_size: 32
+  batch_size: 5
   
   # Cache embeddings (theo hash của text)
   enable_cache: true

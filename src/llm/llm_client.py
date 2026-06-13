@@ -1,14 +1,5 @@
 """
-LLM Client - Real implementation using OpenAI-compatible API.
-
-Hỗ trợ:
-- Google Gemini (qua OpenAI-compatible endpoint)
-- OpenAI
-- Bất kỳ provider nào có OpenAI-compatible API
-- Tool calling (function calling)
-- Streaming
-- Auto retry
-- Token counting
+LLM Client using OpenAI-compatible API.
 """
 
 from __future__ import annotations
@@ -164,19 +155,35 @@ class LLMClient:
         if response_format:
             params["response_format"] = response_format
         
-        try:
-            response = await self._client.chat.completions.create(**params)
-        except RateLimitError as e:
-            logger.warning(f"Rate limit hit: {e}")
-            # Wait and retry
-            await asyncio.sleep(self.config.llm.retry_delay * 2)
-            response = await self._client.chat.completions.create(**params)
-        except APITimeoutError as e:
-            logger.error(f"API timeout: {e}")
-            raise
-        except APIError as e:
-            logger.error(f"API error: {e}")
-            raise
+        max_retries = 5
+        retry_delay = self.config.llm.retry_delay or 1.0
+        response = None
+        for attempt in range(max_retries):
+            try:
+                response = await self._client.chat.completions.create(**params)
+                break
+            except RateLimitError as e:
+                err_msg = str(e).lower()
+                if "quota" in err_msg or "exceeded your current quota" in err_msg:
+                    logger.error(f"Daily LLM quota limit exceeded (RESOURCE_EXHAUSTED). Failing fast: {e}")
+                    raise
+                if attempt == max_retries - 1:
+                    logger.error(f"Rate limit hit on final attempt: {e}")
+                    raise
+                # Parse retry duration from Gemini error message
+                import re
+                wait_time = retry_delay * (2 ** attempt)
+                match = re.search(r"retry in ([\d\.]+)s", str(e))
+                if match:
+                    wait_time = float(match.group(1)) + 0.5
+                logger.warning(f"Rate limit hit, retrying in {wait_time:.2f}s... (attempt {attempt+1}/{max_retries})")
+                await asyncio.sleep(wait_time)
+            except APITimeoutError as e:
+                logger.error(f"API timeout: {e}")
+                raise
+            except APIError as e:
+                logger.error(f"API error: {e}")
+                raise
         
         latency = int((time.time() - start) * 1000)
         
@@ -200,6 +207,18 @@ class LLMClient:
             raw_content,
             enabled=self._strip_thought,
         )
+
+        # Guard: Gemini API yêu cầu assistant message phải có text HOẶC tool_calls.
+        # Nếu sau khi strip thought, content rỗng VÀ không có tool_calls
+        # → dùng fallback để tránh lỗi "model output must contain either output text or tool calls"
+        # khi message này được đưa vào conversation history ở turn tiếp theo.
+        if not cleaned_content and not tool_calls:
+            logger.warning(
+                "[LLMClient] Response content is empty after thought-stripping and has no tool_calls. "
+                "This would corrupt conversation history. Using raw_content as fallback."
+            )
+            # Ưu tiên dùng raw content (kể cả thought block) thay vì chuỗi rỗng
+            cleaned_content = raw_content.strip() or "..."
 
         return LLMResponse(
             content=cleaned_content,

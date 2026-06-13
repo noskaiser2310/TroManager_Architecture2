@@ -1,7 +1,5 @@
 """
 Decision Toolkit - Tools hỗ trợ ra quyết định về phòng, giá, chuyển phòng.
-
-Tất cả tools query trực tiếp từ PostgreSQL database.
 """
 
 from __future__ import annotations
@@ -184,7 +182,7 @@ async def recommend_transfer(tenant_id: int) -> str:
         async with pool.acquire() as conn:
             # Lấy thông tin tenant hiện tại
             tenant = await conn.fetchrow("""
-                SELECT t.tenant_id, t.full_name, t.room_id, r.floor, r.area_m2, r.monthly_rent
+                SELECT t.tenant_id, t.full_name, t.room_id, r.room_number, r.floor, r.area_m2, r.monthly_rent
                 FROM user_profiles t
                 LEFT JOIN rooms r ON t.room_id = r.room_id
                 WHERE t.tenant_id = $1
@@ -241,8 +239,10 @@ async def recommend_transfer(tenant_id: int) -> str:
                 return "Hiện không có phòng trống phù hợp để đề xuất."
             
             # Format
+            room_num = tenant.get('room_number')
+            room_display = room_num if room_num is not None and str(room_num).strip() != "" else f"ID:{tenant['room_id']}"
             lines = [
-                f"Đề xuất phòng cho khách {tenant['full_name']} (đang ở phòng {tenant['room_id']}, tầng {current_floor}):",
+                f"Đề xuất phòng cho khách {tenant['full_name']} (đang ở phòng {room_display}, tầng {current_floor}):",
             ]
             if reason:
                 lines.append(f"Lý do đề xuất: {reason}")

@@ -10,7 +10,7 @@ Flow:
 
 Sau khi approve, `execute_approved()` sẽ replay tool call dựa trên `tool_name` + `tool_args`.
 Hiện tại hỗ trợ:
-- send_payment_reminder: gửi Zalo thật + log behavior
+- send_payment_reminder: gửi Zalo + log behavior
 """
 
 from __future__ import annotations

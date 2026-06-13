@@ -127,7 +127,7 @@ class LLMConfig:
     
     @property
     def embedding_dim(self) -> int:
-        return self.embedding.extra.get("dimension", 3072)
+        return self.embedding.extra.get("dimension", 768)
 
 
 def load_llm_config(config_path: Optional[str] = None) -> LLMConfig:
@@ -204,7 +204,7 @@ def load_llm_config(config_path: Optional[str] = None) -> LLMConfig:
         request_timeout=emb_raw.get("request_timeout", 30),
         rate_limit_rpm=emb_raw.get("rate_limit", {}).get("requests_per_minute", 300),
         extra={
-            "dimension": emb_raw.get("dimension", 3072),
+            "dimension": emb_raw.get("dimension", 768),
             "batch_size": emb_raw.get("batch_size", 32),
             "enable_cache": emb_raw.get("enable_cache", True),
         },

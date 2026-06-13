@@ -1,7 +1,5 @@
 """
 Knowledge Toolkit - Tra cứu thông tin từ database.
-
-Tất cả tools query trực tiếp PostgreSQL và RAG knowledge base.
 """
 
 from __future__ import annotations
@@ -27,8 +25,12 @@ async def get_invoice_detail(tenant_id: int, month: str) -> str:
     """
     Lấy chi tiết hóa đơn của tenant theo tháng.
     """
-    from ..core import get_db_pool
+    from ..core import get_db_pool, current_tenant_id
     from datetime import datetime
+    
+    ctx_tenant_id = current_tenant_id.get()
+    if ctx_tenant_id is not None:
+        tenant_id = ctx_tenant_id
     
     # Normalize month format to YYYY-MM
     month = month.strip()
@@ -114,7 +116,11 @@ async def get_contract_status(tenant_id: int) -> str:
     """
     Lấy trạng thái hợp đồng hiện tại của tenant.
     """
-    from ..core import get_db_pool
+    from ..core import get_db_pool, current_tenant_id
+    
+    ctx_tenant_id = current_tenant_id.get()
+    if ctx_tenant_id is not None:
+        tenant_id = ctx_tenant_id
     
     try:
         pool = get_db_pool()
@@ -180,7 +186,11 @@ async def get_payment_history(tenant_id: int, months: int = 6) -> str:
     """
     Lấy lịch sử thanh toán của tenant trong N tháng gần nhất.
     """
-    from ..core import get_db_pool
+    from ..core import get_db_pool, current_tenant_id
+    
+    ctx_tenant_id = current_tenant_id.get()
+    if ctx_tenant_id is not None:
+        tenant_id = ctx_tenant_id
     
     try:
         pool = get_db_pool()
@@ -231,7 +241,11 @@ async def get_room_info(tenant_id: int) -> str:
     """
     Lấy thông tin phòng hiện tại của tenant.
     """
-    from ..core import get_db_pool
+    from ..core import get_db_pool, current_tenant_id
+    
+    ctx_tenant_id = current_tenant_id.get()
+    if ctx_tenant_id is not None:
+        tenant_id = ctx_tenant_id
     
     try:
         pool = get_db_pool()
@@ -292,12 +306,27 @@ async def query_policies(query: str, tenant_id: Optional[int] = None) -> str:
     Tra cứu chính sách, nội quy nhà trọ theo câu hỏi.
     
     Sử dụng RAG trên knowledge_base/*.md để tìm thông tin liên quan.
+    Phù hợp cho cả khách thuê lẫn khách vãng lai (guest).
     """
     from ..core import get_knowledge_lookup
     
+    # Sanitize: strip control chars, limit length
+    query = query.strip().replace("\x00", "")[:500]
+    if not query:
+        return "Câu hỏi trống, vui lòng nhập nội dung cụ thể."
+    
     try:
         lookup = get_knowledge_lookup()
-        results = await lookup.retrieve(query, top_k=3)
+        # Lấy nhiều hơn cho guest (không có context cá nhân)
+        top_k = 5 if tenant_id is None else 3
+        results = await lookup.retrieve(query, top_k=top_k)
+        
+        if not results:
+            # Fallback: thử retrieve_simple nếu LlamaIndex index trống
+            try:
+                results = await lookup.retrieve_simple(query, top_k=top_k)
+            except Exception:
+                pass
         
         if not results:
             return (
@@ -305,16 +334,85 @@ async def query_policies(query: str, tenant_id: Optional[int] = None) -> str:
                 "Vui lòng liên hệ quản lý 0901-234-567 để được hỗ trợ."
             )
         
-        lines = ["Thông tin tìm được:"]
+        lines = ["Thông tin tìm được từ Knowledge Base:"]
         for r in results:
-            lines.append(f"\n[Từ: {r['source']} - độ liên quan: {r['score']:.2f}]")
-            lines.append(r['text'][:500])  # Limit mỗi chunk
+            source_label = r.get('source', 'không rõ nguồn')
+            score_label = f"{r['score']:.2f}" if r.get('score') else "N/A"
+            lines.append(f"\n[Nguồn: {source_label} | Độ liên quan: {score_label}]")
+            lines.append(r['text'][:600])
         
         return "\n".join(lines)
     
     except Exception as e:
         logger.exception(f"query_policies error: {e}")
         return f"Lỗi khi tra cứu chính sách: {str(e)}"
+
+
+# ============ Tool 6: get_room_by_number (Guest-friendly) ============
+
+class GetRoomByNumberInput(BaseModel):
+    room_number: str = Field(..., description="Số phòng cần tra cứu (vd: 101, 102, 201)")
+    include_tenants: bool = Field(False, description="Có bao gồm thông tin khách thuê hiện tại không")
+
+
+@tool(args_schema=GetRoomByNumberInput)
+async def get_room_by_number(room_number: str, include_tenants: bool = False) -> str:
+    """
+    Tra cứu thông tin phòng theo số phòng. Dùng được cho cả khách vãng lai và khách thuê.
+    Trả về giá thuê, diện tích, tầng, tiện nghi và tình trạng phòng.
+    """
+    from ..core import get_db_pool
+
+    try:
+        pool = get_db_pool()
+        async with pool.acquire() as conn:
+            room = await conn.fetchrow("""
+                SELECT r.room_id, r.room_number, r.floor, r.area_m2,
+                       r.monthly_rent, r.electricity_price, r.water_price,
+                       r.service_fee, r.max_occupants, r.amenities,
+                       r.status
+                FROM rooms r
+                WHERE r.room_number = $1
+            """, room_number)
+
+            if not room:
+                return f"Không tìm thấy phòng {room_number}."
+
+            import json
+            amenities = room['amenities'] or {}
+            if isinstance(amenities, str):
+                amenities = json.loads(amenities)
+
+            amenity_list = [k for k, v in amenities.items() if v]
+            amenity_text = ", ".join(amenity_list) if amenity_list else "Chưa cập nhật"
+
+            status_text = {
+                'vacant': 'Còn trống',
+                'occupied': 'Đã có khách',
+                'maintenance': 'Đang bảo trì',
+            }.get(room['status'], room['status'] or 'Còn trống')
+
+            result = (
+                f"Thông tin phòng {room['room_number']} (Tầng {room['floor']}):\n"
+                f"- Diện tích: {room['area_m2']}m²\n"
+                f"- Giá thuê: {float(room['monthly_rent']):,.0f}đ/tháng\n"
+                f"- Phí điện: {float(room['electricity_price']):,.0f}đ/kWh\n"
+                f"- Phí nước: {float(room['water_price']):,.0f}đ/m³\n"
+                f"- Phí dịch vụ: {float(room['service_fee']):,.0f}đ/tháng\n"
+                f"- Số người tối đa: {room['max_occupants']}\n"
+                f"- Tiện nghi: {amenity_text}\n"
+                f"- Tình trạng: {status_text}"
+            )
+
+            # NOTE: include_tenants được xóa cố ý — LLM không nên biết tên/SL khách
+            # thuê của phòng khác (tiếm ẩn prompt injection PII leak).
+            # Nếu cần, wrap bằng admin-only endpoint có auth riêng.
+
+            return result
+
+    except Exception as e:
+        logger.exception(f"get_room_by_number error: {e}")
+        return f"Lỗi khi tra cứu phòng: {str(e)}"
 
 
 # ============ Export ============
@@ -325,4 +423,5 @@ KNOWLEDGE_TOOLS = [
     get_payment_history,
     get_room_info,
     query_policies,
+    get_room_by_number,
 ]

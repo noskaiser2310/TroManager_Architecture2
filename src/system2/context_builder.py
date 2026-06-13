@@ -79,17 +79,24 @@ class ContextBuilder:
         behavior = None
         relevant_memories = []
 
+        import asyncio
         try:
-            profile = await self.profiles.get_profile(tenant_id)
-            if not profile:
+            profile, behavior = await asyncio.gather(
+                self.profiles.get_profile(tenant_id),
+                self.behaviors.get_summary(tenant_id, days=behavior_days),
+                return_exceptions=True
+            )
+            if isinstance(profile, Exception):
+                logger.exception(f"Profile fetch failed for tenant {tenant_id}: {profile}")
+                profile = None
+            elif not profile:
                 logger.warning(f"No profile found for tenant {tenant_id}")
+                
+            if isinstance(behavior, Exception):
+                logger.exception(f"Behavior summary failed for tenant {tenant_id}: {behavior}")
+                behavior = None
         except Exception as e:
-            logger.exception(f"Profile fetch failed for tenant {tenant_id}: {e}")
-
-        try:
-            behavior = await self.behaviors.get_summary(tenant_id, days=behavior_days)
-        except Exception as e:
-            logger.exception(f"Behavior summary failed for tenant {tenant_id}: {e}")
+            logger.exception(f"Gather failed for tenant {tenant_id}: {e}")
 
         try:
             if profile:

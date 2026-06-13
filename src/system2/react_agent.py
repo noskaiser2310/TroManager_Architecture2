@@ -10,6 +10,7 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
+from pathlib import Path
 
 from langchain_core.messages import (
     SystemMessage,
@@ -83,6 +84,10 @@ class ReActAgent:
         guardrails: Guardrails,
         profile_service: ProfileService,
         behavior_tracker: BehaviorTracker,
+        conversation_memory=None,
+        persona_optimizer=None,
+        cron_scheduler=None,
+        system_prompt: Optional[str] = None,
     ):
         self.config = config
         self.llm = llm_client
@@ -90,6 +95,9 @@ class ReActAgent:
         self.guardrails = guardrails
         self.profiles = profile_service
         self.behaviors = behavior_tracker
+        self.conversation_memory = conversation_memory
+        self.persona_optimizer = persona_optimizer
+        self.cron_scheduler = cron_scheduler
         
         self.max_iterations = config.get("max_iterations", 4)
         self.max_tokens = config.get("max_tokens", 8000)
@@ -104,9 +112,13 @@ class ReActAgent:
 
         self.metrics = System2Metrics()
         
-        # Load system prompt
-        with open("config/prompts/system2_prompt.txt", "r", encoding="utf-8") as f:
-            self.system_prompt_template = f.read()
+        if system_prompt:
+            self.system_prompt_template = system_prompt
+        else:
+            # Load system prompt from file (absolute path to avoid CWD issues)
+            prompt_path = Path(__file__).resolve().parent.parent.parent / "config" / "prompts" / "system2_prompt.txt"
+            with open(prompt_path, "r", encoding="utf-8") as f:
+                self.system_prompt_template = f.read()
     
     async def run(self, request: ReActRequest) -> ReActResponse:
         """
@@ -136,6 +148,7 @@ class ReActAgent:
             
             # 4. ReAct loop
             iterations = 0
+            executed_tool_calls: set[str] = set()
             for iteration in range(self.max_iterations):
                 iterations = iteration + 1
                 
@@ -144,34 +157,73 @@ class ReActAgent:
                     messages, self.max_tokens
                 )
                 
-                # Chỉ pass tools ở iteration 1 để tránh lỗi thought_signature của Gemini API
-                tools_for_this_iteration = request.tools if iteration == 0 else None
+                # Pass tools trên MỌI iteration để Gemini có thể gọi tool ở bất kỳ bước nào.
+                # Exception: không pass tools nếu message cuối là ToolMessage (tránh lỗi Gemini
+                # không chấp nhận tools binding khi có pending tool response trong history).
+                last_msg = messages[-1] if messages else None
+                from langchain_core.messages import ToolMessage as _TM
+                tools_for_this_iteration = (
+                    request.tools if not isinstance(last_msg, _TM) else None
+                )
                 
                 # a. LLM reasoning (wrap in timeout để tránh hang khi API treo)
-                try:
-                    response = await asyncio.wait_for(
-                        self.llm.ainvoke(messages, tools=tools_for_this_iteration),
-                        timeout=self.llm_timeout_seconds,
+                # Retry tối đa 3 lần với exponential backoff (giải quyết High #8)
+                response = None
+                last_error = None
+                for attempt in range(3):
+                    try:
+                        response = await asyncio.wait_for(
+                            self.llm.ainvoke(messages, tools=tools_for_this_iteration),
+                            timeout=self.llm_timeout_seconds,
+                        )
+                        break  # Thành công
+                    except asyncio.TimeoutError as e:
+                        last_error = e
+                        logger.warning(f"LLM call timeout attempt {attempt+1}")
+                        await asyncio.sleep(1.5 ** attempt)
+                    except Exception as e:
+                        last_error = e
+                        logger.warning(f"LLM call error attempt {attempt+1}: {e}")
+                        await asyncio.sleep(1.5 ** attempt)
+                
+                if response is None:
+                    # Ghi nhận metric và fallback nếu tất cả các lần retry đều thất bại
+                    if isinstance(last_error, asyncio.TimeoutError):
+                        logger.warning(
+                            f"[tenant {request.tenant_id}] LLM call timeout "
+                            f"({self.llm_timeout_seconds}s) at iteration {iterations} after retries"
+                        )
+                        self.metrics.llm_timeouts += 1
+                    else:
+                        logger.exception(
+                            f"[tenant {request.tenant_id}] LLM call error "
+                            f"at iteration {iterations} after retries: {last_error}"
+                        )
+                        self.metrics.llm_failures += 1
+                    return await self._handle_llm_timeout(
+                        request, context, iterations, start_time, tool_calls_log, actions_taken
                     )
-                except asyncio.TimeoutError:
+                
+                # Safety check: Nếu response có cả content rỗng VÀ không có tool_calls
+                # (có thể xảy ra nếu model chỉ sinh ra thought block mà không có text rõ ràng),
+                # thì không append vào history (sẽ gây lỗi Gemini API ở iteration kế tiếp).
+                # Thay vào đó, trả fallback ngay lập tức.
+                if not response.content and not response.tool_calls:
                     logger.warning(
-                        f"[tenant {request.tenant_id}] LLM call timeout "
-                        f"({self.llm_timeout_seconds}s) at iteration {iterations}"
+                        f"[tenant {request.tenant_id}] LLM returned empty content with no tool_calls "
+                        f"at iteration {iterations}. Returning fallback to avoid history corruption."
                     )
-                    self.metrics.llm_timeouts += 1
-                    # Trả về fallback message thay vì break
-                    return await self._handle_llm_timeout(
-                        request, context, iterations, start_time, tool_calls_log, actions_taken
+                    fallback = self.guardrails.get_fallback_message()
+                    latency = int((time.time() - start_time) * 1000)
+                    return ReActResponse(
+                        answer=fallback,
+                        iterations=iterations,
+                        tool_calls=tool_calls_log,
+                        state=ReActState.FAILED,
+                        latency_ms=latency,
+                        actions_taken=actions_taken,
                     )
-                except Exception as e:
-                    logger.exception(
-                        f"[tenant {request.tenant_id}] LLM call error "
-                        f"at iteration {iterations}: {e}"
-                    )
-                    self.metrics.llm_failures += 1
-                    return await self._handle_llm_timeout(
-                        request, context, iterations, start_time, tool_calls_log, actions_taken
-                    )
+
                 messages.append(response)
                 
                 # b. Check if final answer
@@ -201,8 +253,21 @@ class ReActAgent:
                     # but tests/mocks may pass objects. Support both.
                     tc = self._normalize_tool_call(tool_call)
                     try:
-                        # Validate input
-                        is_valid, error = self.guardrails.validate_tool_input(tc)
+                        # 1. Check duplicate tool call
+                        import json
+                        tc_sig = f"{tc.get('name')}:{json.dumps(tc.get('args', {}), sort_keys=True)}"
+                        if tc_sig in executed_tool_calls:
+                            observation = ToolMessage(
+                                content="Error: Duplicate tool call. You have already executed this tool with these exact arguments in this turn. Please stop looping.",
+                                tool_call_id=tc.get("id", ""),
+                                name=tc.get("name", ""),
+                            )
+                            self.metrics.tool_failures += 1
+                        else:
+                            executed_tool_calls.add(tc_sig)
+                            
+                            # 2. Validate input
+                            is_valid, error = self.guardrails.validate_tool_input(tc)
                         if not is_valid:
                             observation = ToolMessage(
                                 content=f"Invalid input: {error}",
@@ -405,7 +470,7 @@ class ReActAgent:
             memories=memories_text,
             behavior_summary=context.behavior_summary_text(),
             tool_descriptions=tool_descriptions,
-            query=request.query,
+            query=f"<user_query>\n{request.query.replace('</user_query>', '')}\n</user_query>",
             history_context=request.history_context or "(Không có lịch sử hội thoại trước đó)",
             current_date=current_date,
         )
@@ -418,14 +483,18 @@ class ReActAgent:
         iterations: int,
         tool_calls: list[dict],
     ):
-        """Log response to conversation history."""
-        # Log to conversation history (implementation in conversation_service)
+        """Log response metrics and behavior (conversation turn is saved by caller).
+        
+        NOTE: conversation_memory.add_turn() is intentionally NOT called here.
+        The chat handler in main.py saves the full turn (with session_id, latency_ms).
+        Calling add_turn() here would create duplicate rows in conversation_history.
+        """
         logger.info(
             f"ReAct completed: tenant={request.tenant_id}, "
             f"iterations={iterations}, tools={len(tool_calls)}"
         )
         
-        # Log behavior
+        # Log behavior only (no conversation history write)
         await self.behaviors.log(
             tenant_id=request.tenant_id,
             action_type=ActionTypes.AI_RESPONSE,
@@ -435,7 +504,7 @@ class ReActAgent:
                 "tool_count": len(tool_calls),
             },
         )
-    
+                
     def _update_metrics(self, iterations: int, latency: int, tool_count: int):
         """Update metrics sau mỗi request."""
         n = self.metrics.total_requests

@@ -1,12 +1,5 @@
 """
 Main entry point - Khởi tạo FastAPI app và wire tất cả real services.
-
-Đã được cập nhật để:
-- Sử dụng LLM client thật (OpenAI-compatible)
-- Kết nối PostgreSQL thật
-- Load knowledge base thật
-- Không có mock data
-- Auto-load .env file (nếu có)
 """
 
 from __future__ import annotations
@@ -29,10 +22,10 @@ import asyncpg
 import hmac
 import hashlib
 import yaml
-from fastapi import FastAPI, HTTPException, Request, Header
+from fastapi import FastAPI, HTTPException, Request, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator, ValidationError
 
 # Internal imports
 from .gateway import RouterGateway, IncomingRequest, create_default_router
@@ -70,6 +63,32 @@ else:
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 logger = logging.getLogger(__name__)
+
+
+# ============ Config loading ============
+
+
+# ============ Admin Auth Dependency ============
+
+def require_admin_key(x_admin_key: Optional[str] = Header(default=None)) -> None:
+    """
+    Dependency bảo vệ tất cả /admin/* endpoints.
+    
+    Client phải gửi header: X-Admin-Key: <giá trị của ADMIN_API_KEY trong .env>
+    Nếu ADMIN_API_KEY chưa được set, admin endpoints vẫn hoạt động nhưng log warning.
+    """
+    admin_key = os.environ.get("ADMIN_API_KEY", "").strip()
+    if not admin_key:
+        logger.warning(
+            "[Security] ADMIN_API_KEY not set in .env — admin endpoints are unprotected! "
+            "Set ADMIN_API_KEY=<secret> in .env immediately."
+        )
+        return  # Cho qua nhưng warn to — safe default cho dev, nguy hiểm trên prod
+    if not x_admin_key or not hmac.compare_digest(x_admin_key, admin_key):
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized: X-Admin-Key header is missing or invalid",
+        )
 
 
 # ============ Config loading ============
@@ -124,6 +143,7 @@ class AppContainer:
         self.behavior_tracker = None
         self.memory_manager = None
         self.conversation_memory = None
+        self.persona_optimizer = None
         self.approval_service = None
 
         # Cron
@@ -219,7 +239,13 @@ async def lifespan(app: FastAPI):
         zalo_client=None,
         behavior_tracker=container.behavior_tracker,
     )
-    logger.info("User modeling services initialized (incl. ConversationMemory + ApprovalService)")
+    
+    from .user_modeling.persona_optimizer import PersonaOptimizer
+    container.persona_optimizer = PersonaOptimizer(
+        db_pool=container.db_pool,
+        api_key=os.environ.get("GEMINI_API_KEY", "")
+    )
+    logger.info("User modeling services initialized (incl. ConversationMemory, PersonaOptimizer, ApprovalService)")
     
     # 6. Build knowledge lookup
     knowledge_dir = config.get("knowledge_base", {}).get("dir", "knowledge_base")
@@ -231,6 +257,18 @@ async def lifespan(app: FastAPI):
     )
     set_knowledge_lookup(knowledge_lookup)
     logger.info(f"Knowledge lookup ready (dir={knowledge_dir})")
+    # Pre-warm RAG index ngay khi startup để tránh cold-start blocking khi user query lần đầu
+    # Wrap in create_task so it doesn't block FastAPI startup
+    import inspect
+    async def _safe_warm_up():
+        try:
+            warm_up_res = knowledge_lookup.warm_up()
+            if inspect.isawaitable(warm_up_res):
+                await warm_up_res
+        except Exception as e:
+            logger.error(f"Knowledge lookup warm_up failed: {e}")
+    asyncio.create_task(_safe_warm_up())
+
     
     # 7. Initialize System 1 (Fast Layer)
     embedding_dim = embedding_client.dimension
@@ -265,11 +303,13 @@ async def lifespan(app: FastAPI):
         guardrails=container.guardrails,
         profile_service=container.profile_service,
         behavior_tracker=container.behavior_tracker,
+        conversation_memory=container.conversation_memory,
+        persona_optimizer=container.persona_optimizer,
     )
     logger.info("System 1 & 2 ready")
     
     # 9. Initialize Router
-    container.router = create_default_router()
+    container.router = create_default_router(config.get("router", {}))
     logger.info("Router Gateway ready")
     
     # 10. Initialize Notifications
@@ -306,6 +346,7 @@ async def lifespan(app: FastAPI):
         llm_client=get_llm_client("pro"),
         conversation_memory=container.conversation_memory,
     )
+    container.react_agent.cron_scheduler = container.cron_scheduler
     
     # 11.5 Injection cho Golden Time Delivery
     container.event_dispatcher.set_dependencies(
@@ -533,6 +574,54 @@ _setup_cors(_APP_CONFIG.get("app", {}))
 _request_id_cfg = _APP_CONFIG.get("app", {}).get("observability", {}).get("request_id", {})
 app.add_middleware(RequestIDMiddleware, config=_request_id_cfg)
 
+# Attach container to app state so routers can access it
+app.state.container = container
+
+from .api.kb_router import kb_router
+app.include_router(kb_router, prefix="/api/kb", dependencies=[Depends(require_admin_key)])
+
+# ============ Global exception handlers ============
+
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Trả 422 JSON rõ ràng thay vì crash 500 khi input không hợp lệ."""
+    errors = exc.errors()
+    # Simplify error message for clients
+    messages = [f"{'.'.join(str(loc) for loc in e['loc'])}: {e['msg']}" for e in errors]
+    return JSONResponse(
+        status_code=422,
+        content={"detail": messages, "error": "Dữ liệu đầu vào không hợp lệ"},
+    )
+
+@app.exception_handler(ValidationError)
+async def pydantic_validation_exception_handler(request: Request, exc: ValidationError):
+    """Bắt ValidationError từ Pydantic (khi khởi tạo model thủ công trong webhook)."""
+    errors = exc.errors()
+    messages = [f"{'.'.join(str(loc) for loc in e['loc'])}: {e['msg']}" for e in errors]
+    return JSONResponse(
+        status_code=422,
+        content={"detail": messages, "error": "Dữ liệu đầu vào không hợp lệ"},
+    )
+
+@app.exception_handler(ValueError)
+async def value_error_handler(request: Request, exc: ValueError):
+    """Bắt ValueError từ custom validation."""
+    return JSONResponse(
+        status_code=422,
+        content={"detail": str(exc), "error": "Dữ liệu đầu vào không hợp lệ"},
+    )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global catch-all cho các lỗi không lường trước (tránh crash server/worker)."""
+    logger.exception(f"Unhandled server error on {request.method} {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error. Lỗi đã được ghi nhận.", "error": str(exc) if os.environ.get("APP_ENV") != "production" else "Internal server error"},
+    )
 
 # ============ Request/Response models ============
 
@@ -542,6 +631,21 @@ class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None  # Nếu không có, sẽ tạo mới
     metadata: dict = {}
+
+    @field_validator("message")
+    @classmethod
+    def validate_message(cls, v: str) -> str:
+        if v is None:
+            raise ValueError("message không được để trống")
+        v = v.strip()
+        if not v:
+            raise ValueError("message không được để trống")
+        # Guard quá dài (prevent abuse)
+        if len(v) > 2000:
+            v = v[:2000]
+        # Strip null bytes (SQL injection / encoding tricks)
+        v = v.replace("\x00", "")
+        return v
 
 
 class ChatResponse(BaseModel):
@@ -581,6 +685,9 @@ async def _process_chat(request: ChatRequest, session_id: str) -> ChatResponse:
     Core chat processing logic (không bao gồm rate limit / session_id setup).
     Được share giữa /chat endpoint và Zalo webhook.
     """
+    from .core.context import current_tenant_id
+    current_tenant_id.set(request.tenant_id)
+
     start = asyncio.get_event_loop().time()
 
     # History context: lấy N turn gần nhất của tenant (nếu có tenant_id)
@@ -618,7 +725,7 @@ async def _process_chat(request: ChatRequest, session_id: str) -> ChatResponse:
             sys2_request = ReActRequest(
                 query=request.message,
                 tenant_id=request.tenant_id or 0,
-                tools=container.tool_registry.get_for_intent(decision.intent or "general_chat"),
+                tools=container.tool_registry.get_all_tools(),  # Agent tự quyết định dùng tool nào
                 history_context=history_context,
             )
             sys2_response = await container.react_agent.run(sys2_request)
@@ -637,7 +744,7 @@ async def _process_chat(request: ChatRequest, session_id: str) -> ChatResponse:
         sys2_request = ReActRequest(
             query=request.message,
             tenant_id=request.tenant_id or 0,
-            tools=container.tool_registry.get_for_intent(decision.intent or "general_chat"),
+            tools=container.tool_registry.get_all_tools(),  # Agent tự quyết định dùng tool nào
             history_context=history_context,
         )
         sys2_response = await container.react_agent.run(sys2_request)
@@ -665,6 +772,23 @@ async def _process_chat(request: ChatRequest, session_id: str) -> ChatResponse:
             )
         except Exception as e:
             logger.warning(f"Failed to save conversation turn: {e}")
+            
+        # Lên lịch chạy Persona Optimizer (Session-based, trễ 1 ngày)
+        if container.persona_optimizer and container.cron_scheduler:
+            try:
+                from datetime import datetime, timedelta
+                run_time = datetime.now() + timedelta(days=1)
+                container.cron_scheduler.scheduler.add_job(
+                    container.persona_optimizer.optimize_tenant_profile,
+                    'date',
+                    run_date=run_time,
+                    args=[request.tenant_id],
+                    id=f"optimize_persona_{request.tenant_id}",
+                    replace_existing=True
+                )
+                logger.info(f"Scheduled Persona Optimizer for tenant {request.tenant_id} at {run_time}")
+            except Exception as e:
+                logger.warning(f"Failed to schedule Persona Optimizer: {e}")
 
     return ChatResponse(
         answer=response_answer,
@@ -739,7 +863,10 @@ async def zalo_webhook(
             logger.warning("Zalo webhook signature mismatch")
             raise HTTPException(status_code=401, detail="Invalid signature")
     else:
-        logger.debug("ZALO_WEBHOOK_SECRET not set; skipping signature check (dev mode)")
+        logger.warning(
+            "[Security] ZALO_WEBHOOK_SECRET not set; skipping signature check. "
+            "Set ZALO_WEBHOOK_SECRET in .env before going to production!"
+        )
 
     try:
         payload = await request.json()
@@ -767,12 +894,14 @@ async def zalo_webhook(
                 tenant_id = profile.tenant_id
 
         # Zalo không gửi session_id, dùng sender_id làm session marker
-        # (mỗi sender có 1 ongoing session — simple approach)
+        # Thêm ngày hiện tại để tự động reset session mỗi ngày, tránh phình to memory
+        from datetime import date
+        session_suffix = date.today().isoformat()
         chat_req = ChatRequest(
             source="zalo",
             tenant_id=tenant_id,
             message=message,
-            session_id=f"zalo-{sender_id}" if sender_id else None,
+            session_id=f"zalo-{sender_id}-{session_suffix}" if sender_id else None,
         )
         # Skip /chat rate limit since webhook already rate-limited
         try:
@@ -788,7 +917,7 @@ async def zalo_webhook(
 
 # ============ Admin endpoints ============
 
-@app.get("/admin/metrics")
+@app.get("/admin/metrics", dependencies=[Depends(require_admin_key)])
 async def get_metrics():
     """System metrics (legacy format, xem thêm /metrics)."""
     return {
@@ -830,7 +959,7 @@ async def prometheus_metrics(format: str = "prometheus"):
         )
 
 
-@app.get("/admin/knowledge/stats")
+@app.get("/admin/knowledge/stats", dependencies=[Depends(require_admin_key)])
 async def knowledge_stats():
     """Knowledge base statistics."""
     from .core import get_knowledge_lookup
@@ -838,7 +967,7 @@ async def knowledge_stats():
     return lookup.get_stats()
 
 
-@app.post("/admin/knowledge/reload")
+@app.post("/admin/knowledge/reload", dependencies=[Depends(require_admin_key)])
 async def knowledge_reload():
     """Reload knowledge index."""
     from .core import get_knowledge_lookup
@@ -871,7 +1000,7 @@ def _approval_to_dict(req) -> dict:
     }
 
 
-@app.get("/admin/approvals")
+@app.get("/admin/approvals", dependencies=[Depends(require_admin_key)])
 async def list_approvals(
     status: Optional[str] = None,
     tenant_id: Optional[int] = None,
@@ -906,7 +1035,7 @@ async def list_approvals(
     }
 
 
-@app.get("/admin/approvals/{approval_id}")
+@app.get("/admin/approvals/{approval_id}", dependencies=[Depends(require_admin_key)])
 async def get_approval(approval_id: int):
     """Lấy chi tiết 1 approval request."""
     if not container.approval_service:
@@ -918,7 +1047,7 @@ async def get_approval(approval_id: int):
     return _approval_to_dict(req)
 
 
-@app.post("/admin/approvals/{approval_id}/approve")
+@app.post("/admin/approvals/{approval_id}/approve", dependencies=[Depends(require_admin_key)])
 async def approve_request(approval_id: int, body: ApprovalDecisionRequest):
     """
     Duyệt approval request.
@@ -938,7 +1067,7 @@ async def approve_request(approval_id: int, body: ApprovalDecisionRequest):
     return {"approval_id": approval_id, "status": "approved", "message": message}
 
 
-@app.post("/admin/approvals/{approval_id}/reject")
+@app.post("/admin/approvals/{approval_id}/reject", dependencies=[Depends(require_admin_key)])
 async def reject_request(approval_id: int, body: ApprovalDecisionRequest):
     """Từ chối approval request."""
     if not container.approval_service:
@@ -956,7 +1085,7 @@ async def reject_request(approval_id: int, body: ApprovalDecisionRequest):
 
 # ============ Appointments admin endpoints ============
 
-@app.get("/admin/appointments")
+@app.get("/admin/appointments", dependencies=[Depends(require_admin_key)])
 async def list_appointments(
     status: Optional[str] = None,
     tenant_id: Optional[int] = None,
@@ -1025,7 +1154,7 @@ class AppointmentUpdateRequest(BaseModel):
     notes: Optional[str] = None
 
 
-@app.post("/admin/appointments/{appointment_id}/update")
+@app.post("/admin/appointments/{appointment_id}/update", dependencies=[Depends(require_admin_key)])
 async def update_appointment(appointment_id: int, body: AppointmentUpdateRequest):
     """Update trạng thái appointment."""
     valid_statuses = {"pending", "confirmed", "cancelled", "completed"}
@@ -1053,7 +1182,7 @@ async def update_appointment(appointment_id: int, body: AppointmentUpdateRequest
 
 # ============ Rate limit admin endpoint ============
 
-@app.get("/admin/rate-limit/stats/{key}")
+@app.get("/admin/rate-limit/stats/{key}", dependencies=[Depends(require_admin_key)])
 async def rate_limit_stats(key: str):
     """Xem stats rate limit cho 1 key (tenant:id, ip:..., zalo:...)."""
     if not container.rate_limiter:
@@ -1061,7 +1190,7 @@ async def rate_limit_stats(key: str):
     return container.rate_limiter.get_stats(key)
 
 
-@app.post("/admin/rate-limit/reset/{key}")
+@app.post("/admin/rate-limit/reset/{key}", dependencies=[Depends(require_admin_key)])
 async def rate_limit_reset(key: str):
     """Reset rate limit bucket cho 1 key."""
     if not container.rate_limiter:

@@ -67,6 +67,10 @@ class BehaviorTracker:
         Returns:
             log_id
         """
+        if not tenant_id or tenant_id <= 0:
+            logger.debug(f"Skipping behavior logging for guest/invalid tenant: {tenant_id}")
+            return None
+
         import json
         metadata_json = json.dumps(metadata or {})
         

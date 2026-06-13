@@ -1,8 +1,9 @@
 """
-Embedding Client - Real implementation sử dụng OpenAI-compatible API.
+Embedding Client using OpenAI-compatible API.
 """
 
 from __future__ import annotations
+import asyncio
 import time
 import hashlib
 import logging
@@ -43,18 +44,40 @@ class EmbeddingClient:
             timeout=config.embedding.request_timeout,
         )
         
-        # Simple in-memory cache
+        # Disk and memory cache
         self._cache: dict[str, list[float]] = {}
+        from pathlib import Path
+        self._cache_file = Path("config/embedding_cache.json")
         if config.embedding.extra.get("enable_cache", True):
             self._cache_enabled = True
+            self._load_cache()
         else:
             self._cache_enabled = False
         
+        self._quota_exhausted = False
         logger.info(
             f"EmbeddingClient initialized: model={self.model}, "
-            f"dim={self.dimension}, cache={'on' if self._cache_enabled else 'off'}"
+            f"dim={self.dimension}, cache={'on (disk)' if self._cache_enabled else 'off'}"
         )
     
+    def _load_cache(self):
+        import json
+        if self._cache_file.exists():
+            try:
+                self._cache = json.loads(self._cache_file.read_text(encoding="utf-8"))
+                logger.info(f"Loaded {len(self._cache)} cached embeddings from disk")
+            except Exception as e:
+                logger.warning(f"Failed to load embedding cache from disk: {e}")
+                self._cache = {}
+
+    def _save_cache(self):
+        import json
+        try:
+            self._cache_file.parent.mkdir(parents=True, exist_ok=True)
+            self._cache_file.write_text(json.dumps(self._cache, ensure_ascii=False), encoding="utf-8")
+        except Exception as e:
+            logger.warning(f"Failed to save embedding cache to disk: {e}")
+
     async def encode(self, text: str) -> list[float]:
         """
         Encode một text thành vector.
@@ -65,6 +88,17 @@ class EmbeddingClient:
         Returns:
             list[float] với độ dài = dimension
         """
+        if self._quota_exhausted:
+            from openai import RateLimitError
+            import httpx
+            mock_req = httpx.Request("POST", "https://generativelanguage.googleapis.com/v1beta/openai/embeddings")
+            mock_resp = httpx.Response(429, request=mock_req, json={"error": {"message": "Daily embedding quota limit exceeded (cached). Failing fast."}})
+            raise RateLimitError(
+                message="Daily embedding quota limit exceeded (cached). Failing fast.",
+                response=mock_resp,
+                body=mock_resp.json()
+            )
+            
         if not text or not text.strip():
             return [0.0] * self.dimension
         
@@ -74,18 +108,43 @@ class EmbeddingClient:
             if cache_key in self._cache:
                 return self._cache[cache_key]
         
-        response = await self._client.embeddings.create(
-            model=self.model,
-            input=text,
-        )
+        from openai import RateLimitError
+        import re
         
-        vector = response.data[0].embedding
+        max_retries = 5
+        retry_delay = 1.0
+        vector = None
+        
+        for attempt in range(max_retries):
+            try:
+                response = await self._client.embeddings.create(
+                    model=self.model,
+                    input=text,
+                )
+                vector = response.data[0].embedding
+                break
+            except RateLimitError as e:
+                err_msg = str(e).lower()
+                if "quota" in err_msg or "exceeded your current quota" in err_msg:
+                    self._quota_exhausted = True
+                    logger.error(f"Daily embedding quota limit exceeded (RESOURCE_EXHAUSTED). Failing fast: {e}")
+                    raise
+                if attempt == max_retries - 1:
+                    logger.error(f"Rate limit hit on final embedding attempt: {e}")
+                    raise
+                wait_time = retry_delay * (2 ** attempt)
+                match = re.search(r"retry in ([\d\.]+)s", str(e))
+                if match:
+                    wait_time = float(match.group(1)) + 0.5
+                logger.warning(f"Embedding rate limit hit, retrying in {wait_time:.2f}s... (attempt {attempt+1}/{max_retries})")
+                await asyncio.sleep(wait_time)
         
         # Update cache
-        if self._cache_enabled:
+        if self._cache_enabled and vector is not None:
             self._cache[cache_key] = vector
+            self._save_cache()
         
-        return vector
+        return vector or [0.0] * self.dimension
     
     async def encode_batch(self, texts: list[str]) -> list[list[float]]:
         """
@@ -97,14 +156,33 @@ class EmbeddingClient:
         Returns:
             list các vectors
         """
+        if self._quota_exhausted:
+            from openai import RateLimitError
+            import httpx
+            mock_req = httpx.Request("POST", "https://generativelanguage.googleapis.com/v1beta/openai/embeddings")
+            mock_resp = httpx.Response(429, request=mock_req, json={"error": {"message": "Daily embedding quota limit exceeded (cached). Failing fast."}})
+            raise RateLimitError(
+                message="Daily embedding quota limit exceeded (cached). Failing fast.",
+                response=mock_resp,
+                body=mock_resp.json()
+            )
+            
         if not texts:
             return []
         
-        batch_size = self.config.embedding.extra.get("batch_size", 32)
+        batch_size = self.config.embedding.extra.get("batch_size", 5)
+        batch_delay = float(self.config.embedding.extra.get("batch_delay", 4.0))
         all_vectors: list[list[float]] = []
         
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i:i + batch_size]
+        from openai import RateLimitError
+        import re
+        
+        batches = [texts[i:i + batch_size] for i in range(0, len(texts), batch_size)]
+        
+        for idx_b, batch in enumerate(batches):
+            if idx_b > 0 and batch_delay > 0:
+                logger.info(f"Sleeping {batch_delay}s between embedding batches to avoid 429 rate limit... (batch {idx_b+1}/{len(batches)})")
+                await asyncio.sleep(batch_delay)
             
             # Check cache cho từng item
             uncached_indices = []
@@ -122,15 +200,42 @@ class EmbeddingClient:
             
             # Call API cho uncached items
             if uncached_texts:
-                response = await self._client.embeddings.create(
-                    model=self.model,
-                    input=uncached_texts,
-                )
-                for local_idx, emb_data in zip(uncached_indices, response.data):
-                    vector = emb_data.embedding
-                    results[local_idx] = vector
+                max_retries = 5
+                retry_delay = 1.0
+                response = None
+                
+                for attempt in range(max_retries):
+                    try:
+                        response = await self._client.embeddings.create(
+                            model=self.model,
+                            input=uncached_texts,
+                        )
+                        break
+                    except RateLimitError as e:
+                        err_msg = str(e).lower()
+                        if "quota" in err_msg or "exceeded your current quota" in err_msg:
+                            self._quota_exhausted = True
+                            logger.error(f"Daily embedding quota limit exceeded (RESOURCE_EXHAUSTED). Failing fast: {e}")
+                            raise
+                        if attempt == max_retries - 1:
+                            logger.error(f"Rate limit hit on final embedding batch attempt: {e}")
+                            raise
+                        wait_time = retry_delay * (2 ** attempt)
+                        match = re.search(r"retry in ([\d\.]+)s", str(e))
+                        if match:
+                            wait_time = float(match.group(1)) + 0.5
+                        logger.warning(f"Embedding batch rate limit hit, retrying in {wait_time:.2f}s... (attempt {attempt+1}/{max_retries})")
+                        await asyncio.sleep(wait_time)
+                
+                if response:
+                    for local_idx, emb_data in zip(uncached_indices, response.data):
+                        vector = emb_data.embedding
+                        results[local_idx] = vector
+                        if self._cache_enabled:
+                            self._cache[self._cache_key(batch[local_idx])] = vector
+                    
                     if self._cache_enabled:
-                        self._cache[self._cache_key(batch[local_idx])] = vector
+                        self._save_cache()
             
             all_vectors.extend(results)
         
@@ -143,7 +248,8 @@ class EmbeddingClient:
     def clear_cache(self):
         """Xóa embedding cache."""
         self._cache.clear()
-        logger.info("Embedding cache cleared")
+        self._quota_exhausted = False
+        logger.info("Embedding cache cleared and quota status reset")
     
     def get_cache_stats(self) -> dict:
         """Lấy thống kê cache."""

@@ -95,7 +95,7 @@ llm:
     # Sẽ được load từ llm_config.yaml
     temperature: 0.4
     max_tokens: 8192
-    timeout: 30
+    timeout: 90
     
   embedding_model:
     # Sẽ được load từ llm_config.yaml
@@ -192,13 +192,13 @@ system2:
 
   # Timeout protection (giây) — tránh tool/LLM call treo vô hạn
   tool_timeout_seconds: 10.0    # Mỗi tool call tối đa 10s
-  llm_timeout_seconds: 30.0     # Mỗi LLM call tối đa 30s
+  llm_timeout_seconds: 90.0     # Mỗi LLM call tối đa 90s
 
   # Guardrails fallback message (khi loop breaker triggered)
   guardrails:
     fallback:
       contact_name: "quản lý"
-      contact_phone: "${LANDLORD_PHONE}"   # Set trong .env, vd: "0901234567"
+      contact_phone: "0901.234.567"  # TODO: move to .env LANDLORD_PHONE
       message: "Hệ thống đang xử lý yêu cầu phức tạp. Vui lòng liên hệ trực tiếp {contact_label} qua số {contact_phone} để được hỗ trợ nhanh nhất."
 
 # =========================================================

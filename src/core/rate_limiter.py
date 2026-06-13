@@ -98,6 +98,15 @@ class RateLimiter:
             return True, ""
 
     async def reset(self, key: str):
+        """Xóa tracking của một key."""
+        async with self._lock:
+            if key in self._buckets:
+                del self._buckets[key]
+
+    async def reset_all(self):
+        """Xóa toàn bộ tracking (dùng cho admin/test)."""
+        async with self._lock:
+            self._buckets.clear()
         """Reset bucket cho key (testing/admin)."""
         async with self._lock:
             self._buckets.pop(key, None)

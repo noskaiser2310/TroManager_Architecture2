@@ -56,7 +56,7 @@ INSERT INTO maintenance_tickets (ticket_code, tenant_id, room_id, issue_category
 INSERT INTO conversation_history (tenant_id, session_id, source, user_message, ai_response, system_used, iterations, latency_ms, tokens_used) VALUES
 (1, uuid_generate_v4(), 'zalo', 'Wifi mật khẩu gì', 'Mật khẩu wifi là: trohai2026', 'system1', 1, 180, 320),
 (1, uuid_generate_v4(), 'zalo', 'Phòng tôi giá bao nhiêu', 'Phòng 101 của anh có giá 3.000.000đ/tháng, chưa bao gồm điện nước.', 'system1', 2, 1450, 890),
-(2, uuid_generate_v4(), 'zalo', 'Tôi còn nợ bao nhiêu', 'Chào chị Lan, tháng 6/2026 chị còn nợ 4.570.000đ. Hạn thanh toán là 05/06.', 'system2', 3, 4200, 2100),
+(2, uuid_generate_v4(), 'zalo', 'Tôi còn nợ bao nhiêu', 'Chào chị Hoa, tháng 6/2026 chị còn nợ 4.570.000đ. Hạn thanh toán là 05/06.', 'system2', 3, 4200, 2100),
 (3, uuid_generate_v4(), 'zalo', 'Điều hòa phòng tôi bị hỏng, báo giúp tôi', 'Em đã tạo yêu cầu sửa chữa TKT-2026-0006. Anh Nam - thợ điện lạnh sẽ liên hệ anh trong 24h tới.', 'system2', 4, 5800, 3500),
 (4, uuid_generate_v4(), 'zalo', 'Bao giờ hết hợp đồng', 'Hợp đồng của chị còn hiệu lực đến 10/07/2026 (còn 35 ngày).', 'system1', 1, 220, 450);
 

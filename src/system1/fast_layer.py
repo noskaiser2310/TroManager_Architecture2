@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
 from ..user_modeling.profile_service import ProfileService
@@ -71,6 +72,22 @@ class FastLayer:
         self.rag_top_k = config.get("rag_top_k", 3)
         
         self.metrics = System1Metrics()
+
+        # Load prompt template một lần khi khởi tạo (absolute path giống react_agent.py)
+        # Tránh đọc file mỗi request và crash nếu CWD không phải project root
+        prompt_path = (
+            Path(__file__).resolve().parent.parent.parent
+            / "config" / "prompts" / "system1_prompt.txt"
+        )
+        try:
+            with open(prompt_path, "r", encoding="utf-8") as f:
+                self._system_prompt_template = f.read()
+        except FileNotFoundError:
+            logger.error(f"System 1 prompt file not found: {prompt_path}")
+            self._system_prompt_template = (
+                "Query: {query}\nContext: {contexts}\n"
+                'Respond in JSON: {{"answer": "...", "confidence": 0.5}}'
+            )
     
     async def process(self, request: System1Request) -> System1Response:
         """
@@ -81,7 +98,11 @@ class FastLayer:
         
         try:
             # Step 1: Embedding
-            query_embedding = await self._get_embedding(request.query)
+            query_embedding = None
+            try:
+                query_embedding = await self._get_embedding(request.query)
+            except Exception as emb_err:
+                logger.warning(f"Failed to generate query embedding: {emb_err}. Skipping semantic cache.")
             
             # Step 2: Profile context (optional cho System 1)
             profile = None
@@ -89,7 +110,7 @@ class FastLayer:
                 profile = await self.profiles.get_profile(request.tenant_id)
             
             # Step 3: Cache lookup
-            if not request.skip_cache:
+            if query_embedding is not None and not request.skip_cache:
                 cached = await self.cache.lookup(
                     query_embedding,
                     threshold=self.cache_threshold,
@@ -201,16 +222,29 @@ class FastLayer:
         prompt = self._build_prompt(query, contexts, profile, history_context)
         
         # Call LLM
-        result = await self.llm.generate(
-            prompt=prompt,
-            response_schema={
-                "answer": str,
-                "confidence": float,
-                "sources": list[str],
-            },
+        messages = [{"role": "user", "content": prompt}]
+        response = await self.llm.generate(
+            messages=messages,
+            response_format={"type": "json_object"},
         )
         
-        return result
+        from ..core import parse_llm_json
+        parsed = parse_llm_json(response.content)
+        
+        if not parsed or "answer" not in parsed:
+            parsed = {
+                "answer": response.content,
+                "confidence": 0.5,
+                "sources": [],
+            }
+            
+        try:
+            parsed["confidence"] = float(parsed.get("confidence", 0.5))
+        except (ValueError, TypeError):
+            parsed["confidence"] = 0.5
+            
+        return parsed
+
     
     def _build_prompt(
         self,
@@ -219,11 +253,7 @@ class FastLayer:
         profile: Optional[dict],
         history_context: str = "",
     ) -> str:
-        """Build prompt cho System 1."""
-        # Load template
-        with open("config/prompts/system1_prompt.txt", "r", encoding="utf-8") as f:
-            template = f.read()
-        
+        """Build prompt cho System 1 (dùng template đã load sẵn từ __init__)."""
         context_text = "\n\n".join([
             f"[Source: {c['source']}]\n{c['text']}"
             for c in contexts
@@ -232,13 +262,13 @@ class FastLayer:
         # Tone adjustment
         tone = "professional"
         if profile:
-            tone = profile.get("tone_preference", "professional")
+            tone = getattr(profile, "tone_preference", "professional")
         
-        return template.format(
+        return self._system_prompt_template.format(
             tone=tone,
             query=query,
             contexts=context_text,
-            tenant_name=profile.get("full_name", "khách") if profile else "khách",
+            tenant_name=getattr(profile, "full_name", "khách") if profile else "khách",
             history_context=history_context or "(Không có lịch sử hội thoại trước đó)",
         )
 

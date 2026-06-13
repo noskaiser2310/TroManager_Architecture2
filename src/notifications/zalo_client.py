@@ -1,5 +1,5 @@
 """
-Zalo OA Client - Gửi tin nhắn Zalo Official Account (real implementation).
+Zalo OA Client - Gửi tin nhắn Zalo Official Account.
 """
 
 from __future__ import annotations

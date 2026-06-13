@@ -3,668 +3,671 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TroManager - Test Console</title>
+<title>TroManager - System Simulation</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
   :root {
-    --bg: #12100e;
-    --sidebar: #181613;
-    --surface: #1e1c18;
-    --surface-hover: #28241f;
-    --accent: #d4a373;
-    --accent-dim: #a67c52;
-    --teal: #2a9d8f;
-    --teal-dim: #1e7a6e;
-    --orange: #c97d3a;
-    --text: #f0ece0;
-    --text-dim: #8a8070;
-    --text-muted: #615a50;
-    --user-msg: #3d3228;
-    --ai-msg: #1e1c18;
-    --border: #28241f;
-    --danger: #c14a4a;
-    --radius: 12px;
-    --radius-sm: 8px;
-    --mode-new: #6b5ce7;
-    --mode-new-dim: #5247b5;
+    --bg-base: #0B0F19;
+    --bg-surface: #151A2A;
+    --bg-surface-hover: #1E253A;
+    --primary: #6366F1;
+    --primary-hover: #4F46E5;
+    --accent: #14B8A6;
+    --accent-hover: #0D9488;
+    --danger: #EF4444;
+    --danger-hover: #DC2626;
+    --text-main: #F8FAFC;
+    --text-muted: #94A3B8;
+    --border: #2E334D;
+    --radius-lg: 16px;
+    --radius-md: 10px;
+    --radius-sm: 6px;
+    --glass-bg: rgba(21, 26, 42, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.08);
   }
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html { font-size: 15px; }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    font-family: 'DM Sans', sans-serif;
-    background: var(--bg);
-    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-base);
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(20, 184, 166, 0.15) 0px, transparent 50%);
+    background-attachment: fixed;
+    color: var(--text-main);
     height: 100vh;
-    display: flex;
     overflow: hidden;
-    line-height: 1.5;
-  }
-
-  /* === SIDEBAR === */
-  .sidebar {
-    width: 250px;
-    min-width: 250px;
-    background: var(--sidebar);
-    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    padding: 20px 16px 16px;
-    gap: 4px;
-    overflow-y: auto;
-  }
-  .sidebar-title {
-    font-family: 'Archivo Black', sans-serif;
-    font-size: 1.2rem;
-    color: var(--accent);
-    margin-bottom: 0;
-    letter-spacing: -0.5px;
-  }
-  .sidebar-sub {
-    font-size: .7rem;
-    color: var(--text-muted);
-    margin-bottom: 16px;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
   }
 
-  /* Mode section headers */
-  .mode-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 8px 6px;
-    margin-top: 2px;
-    font-size: .65rem;
-    text-transform: uppercase;
-    letter-spacing: 1.8px;
-    font-weight: 700;
-    border-top: 1px solid var(--border);
-  }
-  .mode-header:first-of-type { border-top: none; margin-top: 0; }
-  .mode-header .dot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-  .mode-header .dot.new { background: var(--mode-new); }
-  .mode-header .dot.reg { background: var(--teal); }
+  /* Typography */
+  h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
+  p { line-height: 1.6; }
 
-  /* Mode buttons */
-  .mode-btn {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
+  /* Utility Classes */
+  .hidden { display: none !important; }
+  .btn {
+    padding: 10px 16px;
     border-radius: var(--radius-sm);
+    font-weight: 500;
+    font-size: 0.9rem;
     cursor: pointer;
-    transition: all .2s;
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--text-dim);
-    font-family: 'DM Sans', sans-serif;
-    font-size: .85rem;
-    text-align: left;
-    width: 100%;
-  }
-  .mode-btn:hover { background: var(--surface-hover); color: var(--text); }
-  .mode-btn.active-new {
-    background: rgba(107, 92, 231, .12);
-    border-color: var(--mode-new-dim);
-    color: #b0a3f5;
-  }
-  .mode-btn.active-reg {
-    background: rgba(42, 157, 143, .12);
-    border-color: var(--teal-dim);
-    color: var(--teal);
-  }
-  .mode-btn .avatar {
-    width: 28px; height: 28px;
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: .75rem; font-weight: 700;
-    flex-shrink: 0;
-  }
-  .mode-btn.active-new .avatar { background: var(--mode-new-dim); color: #fff; }
-  .mode-btn.active-reg .avatar { background: var(--teal-dim); color: #fff; }
-  .mode-btn:not(.active-new):not(.active-reg) .avatar { background: var(--surface-hover); }
-
-  /* Tenant list nested */
-  .tenant-list { display: flex; flex-direction: column; gap: 2px; margin-left: 0; }
-  .tenant-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 7px 12px 7px 38px;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: all .15s;
+    transition: all 0.2s ease;
     border: none;
-    background: transparent;
-    color: var(--text-muted);
-    font-family: 'DM Sans', sans-serif;
-    font-size: .8rem;
-    text-align: left;
-    width: 100%;
-  }
-  .tenant-btn:hover { background: var(--surface-hover); color: var(--text-dim); }
-  .tenant-btn.active {
-    color: var(--teal);
-    background: rgba(42, 157, 143, .08);
-  }
-  .tenant-btn .tag {
-    margin-left: auto;
-    font-size: .65rem;
-    font-family: 'JetBrains Mono', monospace;
-    color: var(--text-muted);
-    background: var(--surface);
-    padding: 1px 6px;
-    border-radius: 3px;
-  }
-  .tenant-btn.active .tag { color: var(--teal-dim); }
-
-  /* Quick queries */
-  .quick-label {
-    font-size: .65rem;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: var(--text-muted);
-    margin: 14px 0 4px 8px;
-  }
-  .quick-btn {
-    padding: 7px 12px;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: all .15s;
-    border: none;
-    background: transparent;
-    color: var(--text-muted);
-    font-family: 'DM Sans', sans-serif;
-    font-size: .78rem;
-    text-align: left;
-    width: 100%;
-  }
-  .quick-btn:hover { background: var(--surface-hover); color: var(--accent); }
-
-  /* === MAIN === */
-  .main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-
-  /* Meta bar */
-  .meta-bar {
-    padding: 10px 24px;
-    background: var(--sidebar);
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    gap: 16px;
-    font-size: .75rem;
-    font-family: 'JetBrains Mono', monospace;
-    color: var(--text-muted);
-    flex-wrap: wrap;
-    align-items: center;
-    min-height: 42px;
-  }
-  .meta-bar .tag {
     display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
-    border-radius: 4px;
-    background: var(--surface);
-    font-size: .7rem;
-  }
-  .meta-bar .tag.tool { color: var(--teal); }
-  .meta-bar .tag.action { color: var(--accent); }
-  .meta-bar .latency { color: var(--text-dim); }
-  .meta-bar .status {
-    margin-left: auto;
-    font-size: .65rem;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-  }
-  .meta-bar .status.ok { color: var(--teal); }
-  .meta-bar .status.err { color: var(--danger); }
-
-  /* Mode badge */
-  .mode-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 3px 10px;
-    border-radius: 20px;
-    font-size: .7rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: .5px;
-  }
-  .mode-badge.new {
-    background: rgba(107, 92, 231, .15);
-    color: #b0a3f5;
-  }
-  .mode-badge.reg {
-    background: rgba(42, 157, 143, .15);
-    color: var(--teal);
-  }
-
-  /* Chat */
-  .chat {
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px 24px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    scroll-behavior: smooth;
-  }
-  .chat::-webkit-scrollbar { width: 4px; }
-  .chat::-webkit-scrollbar-track { background: transparent; }
-  .chat::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-  .msg {
-    max-width: 78%;
-    padding: 12px 16px;
-    border-radius: var(--radius);
-    line-height: 1.6;
-    animation: fadeIn .3s ease;
-    word-wrap: break-word;
-    white-space: pre-wrap;
-  }
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-
-  .msg.user {
-    align-self: flex-end;
-    background: var(--user-msg);
-    border-bottom-right-radius: 4px;
-    color: var(--text);
-  }
-  .msg.ai {
-    align-self: flex-start;
-    background: var(--ai-msg);
-    border: 1px solid var(--border);
-    border-bottom-left-radius: 4px;
-    color: var(--text);
-  }
-  .msg .tool-badge {
-    display: inline-block;
-    font-size: .65rem;
-    font-family: 'JetBrains Mono', monospace;
-    padding: 2px 8px;
-    border-radius: 4px;
-    background: var(--surface-hover);
-    color: var(--teal);
-    margin-bottom: 6px;
-  }
-
-  /* Typing */
-  .typing {
-    align-self: flex-start;
-    display: flex;
-    gap: 4px;
-    padding: 16px 20px;
-    background: var(--ai-msg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    border-bottom-left-radius: 4px;
-  }
-  .typing span {
-    width: 6px; height: 6px;
-    background: var(--text-muted);
-    border-radius: 50%;
-    animation: typing 1.2s infinite;
-  }
-  .typing span:nth-child(2) { animation-delay: .2s; }
-  .typing span:nth-child(3) { animation-delay: .4s; }
-  @keyframes typing {
-    0%, 60%, 100% { opacity: .3; transform: scale(1); }
-    30% { opacity: 1; transform: scale(1.3); }
-  }
-
-  /* Input */
-  .input-area {
-    padding: 12px 24px 16px;
-    background: var(--sidebar);
-    border-top: 1px solid var(--border);
-    display: flex;
-    gap: 10px;
-    align-items: flex-end;
-  }
-  .input-area textarea {
-    flex: 1;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    color: var(--text);
-    font-family: 'DM Sans', sans-serif;
-    font-size: .9rem;
-    padding: 10px 14px;
-    resize: none;
-    outline: none;
-    transition: border-color .2s;
-    line-height: 1.5;
-    min-height: 44px;
-    max-height: 120px;
-  }
-  .input-area textarea:focus { border-color: var(--accent-dim); }
-  .input-area textarea::placeholder { color: var(--text-muted); }
-  .send-btn {
-    padding: 10px 20px;
-    background: var(--accent-dim);
-    border: none;
-    border-radius: var(--radius-sm);
-    color: var(--bg);
-    font-family: 'DM Sans', sans-serif;
-    font-weight: 700;
-    font-size: .85rem;
-    cursor: pointer;
-    transition: all .2s;
-    white-space: nowrap;
-    height: 44px;
-  }
-  .send-btn:hover { background: var(--accent); }
-  .send-btn:disabled { opacity: .4; cursor: not-allowed; }
-
-  /* Welcome */
-  .welcome {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    color: var(--text-muted);
     gap: 8px;
-    text-align: center;
   }
-  .welcome .icon { font-size: 2.5rem; opacity: .3; }
-  .welcome h2 { font-family: 'Archivo Black', sans-serif; color: var(--text-dim); font-size: 1.1rem; }
-  .welcome p { font-size: .85rem; max-width: 360px; }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-primary:hover { background: var(--primary-hover); transform: translateY(-1px); }
+  .btn-accent { background: var(--accent); color: white; }
+  .btn-accent:hover { background: var(--accent-hover); transform: translateY(-1px); }
+  .btn-danger { background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2); }
+  .btn-danger:hover { background: var(--danger); color: white; }
+  .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-main); }
+  .btn-outline:hover { background: var(--bg-surface-hover); border-color: var(--text-muted); }
 
-  /* Responsive */
-  @media (max-width: 760px) {
-    .sidebar { width: 200px; min-width: 200px; padding: 16px 10px; font-size: .8rem; }
-    .msg { max-width: 88%; }
-    .meta-bar { padding: 8px 16px; gap: 10px; font-size: .7rem; }
-    .chat { padding: 16px; }
-    .input-area { padding: 8px 16px 12px; }
+  /* Screen Management */
+  .screen {
+    flex: 1;
+    display: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    height: 100%;
+    width: 100%;
   }
-  @media (max-width: 540px) {
-    .sidebar { display: none; }
+  .screen.active {
+    display: flex;
+    opacity: 1;
   }
+
+  /* ====== LOGIN SCREEN ====== */
+  #login-screen {
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .login-container {
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    padding: 40px;
+    width: 100%;
+    max-width: 480px;
+    text-align: center;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+  .login-logo {
+    width: 64px; height: 64px;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    border-radius: var(--radius-md);
+    margin: 0 auto 24px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 32px; font-weight: bold;
+    box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3);
+  }
+  .login-title { font-size: 1.5rem; margin-bottom: 8px; }
+  .login-subtitle { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 32px; }
+  .role-cards { display: flex; flex-direction: column; gap: 16px; }
+  .role-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+  }
+  .role-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--primary);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  }
+  .role-icon {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem;
+    background: rgba(255,255,255,0.05);
+  }
+  .role-info h3 { font-size: 1rem; margin-bottom: 4px; }
+  .role-info p { font-size: 0.8rem; color: var(--text-muted); }
+  
+  /* Tenant select dropdown inside role card */
+  .tenant-select {
+    margin-top: 10px;
+    width: 100%;
+    padding: 8px;
+    background: var(--bg-base);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    border-radius: var(--radius-sm);
+    display: none;
+  }
+
+  /* ====== CHAT SCREEN ====== */
+  #chat-screen { flex-direction: column; max-width: 900px; margin: 0 auto; width: 100%; padding: 20px; }
+  .chat-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 20px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    border-bottom: none;
+  }
+  .chat-profile { display: flex; align-items: center; gap: 12px; }
+  .chat-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--primary); display: flex; align-items: center; justify-content: center; font-weight: 600; }
+  .chat-name { font-weight: 600; font-size: 1rem; }
+  .chat-role { font-size: 0.8rem; color: var(--text-muted); }
+  .chat-body {
+    flex: 1;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-bottom: none;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .msg {
+    max-width: 80%; padding: 12px 16px; border-radius: var(--radius-lg);
+    line-height: 1.5; font-size: 0.95rem; animation: fadeIn 0.3s ease;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .msg.user { align-self: flex-end; background: var(--primary); color: white; border-bottom-right-radius: 4px; }
+  .msg.ai { align-self: flex-start; background: var(--bg-base); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+  .msg p { margin-bottom: 0.75em; }
+  .msg p:last-child { margin-bottom: 0; }
+  .msg ul, .msg ol { margin-left: 1.5em; margin-bottom: 0.75em; }
+  .msg strong { font-weight: 600; color: var(--accent); }
+  
+  .meta-tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: rgba(20, 184, 166, 0.1); color: var(--accent);
+    padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-family: 'Fira Code', monospace;
+    margin-bottom: 8px;
+  }
+  
+  .chat-input-area {
+    padding: 16px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    display: flex; gap: 12px;
+  }
+  .chat-input-area textarea {
+    flex: 1; background: var(--bg-base); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 12px 16px; color: var(--text-main);
+    font-family: inherit; font-size: 0.95rem; resize: none; outline: none;
+    transition: border-color 0.2s; height: 48px;
+  }
+  .chat-input-area textarea:focus { border-color: var(--primary); }
+  
+  /* Typing Indicator */
+  .typing {
+    display: flex; gap: 4px; padding: 16px; background: var(--bg-base);
+    border: 1px solid var(--border); border-radius: var(--radius-lg);
+    border-bottom-left-radius: 4px; align-self: flex-start;
+  }
+  .typing span {
+    width: 6px; height: 6px; background: var(--text-muted); border-radius: 50%;
+    animation: bounce 1.4s infinite ease-in-out both;
+  }
+  .typing span:nth-child(1) { animation-delay: -0.32s; }
+  .typing span:nth-child(2) { animation-delay: -0.16s; }
+  @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+
+  /* ====== ADMIN DASHBOARD ====== */
+  #admin-screen {
+    padding: 20px;
+    max-width: 1400px; margin: 0 auto;
+    display: grid; grid-template-columns: 300px 1fr; gap: 20px;
+  }
+  .admin-sidebar {
+    background: var(--glass-bg); backdrop-filter: blur(12px); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 20px; display: flex; flex-direction: column;
+  }
+  .admin-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border);
+  }
+  .file-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+  .file-item {
+    padding: 10px 12px; border-radius: var(--radius-sm);
+    display: flex; justify-content: space-between; align-items: center;
+    cursor: pointer; transition: all 0.2s; border: 1px solid transparent;
+  }
+  .file-item:hover { background: var(--bg-surface-hover); }
+  .file-item.active { background: rgba(99, 102, 241, 0.1); border-color: rgba(99, 102, 241, 0.3); color: var(--primary); }
+  .file-name { font-family: 'Fira Code', monospace; font-size: 0.85rem; }
+  .file-size { font-size: 0.75rem; color: var(--text-muted); }
+
+  .admin-main {
+    background: var(--bg-surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .editor-header {
+    padding: 16px 24px; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center; background: var(--bg-base);
+  }
+  .editor-path {
+    background: var(--bg-surface-hover); border: 1px solid var(--border);
+    color: var(--text-main); padding: 8px 12px; border-radius: var(--radius-sm);
+    font-family: 'Fira Code', monospace; width: 300px; font-size: 0.9rem;
+    outline: none; transition: border-color 0.2s;
+  }
+  .editor-path:focus { border-color: var(--primary); }
+  .editor-body { flex: 1; padding: 0; display: flex; overflow: hidden; }
+  .editor-textarea {
+    width: 100%; height: 100%; border: none; background: transparent;
+    color: var(--text-main); font-family: 'Fira Code', monospace; font-size: 0.95rem;
+    padding: 24px; resize: none; outline: none; line-height: 1.6;
+    overflow-y: auto;
+  }
+  
+  /* Toast Notification */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    padding: 12px 20px; border-radius: var(--radius-md);
+    background: var(--bg-surface); border: 1px solid var(--border);
+    color: var(--text-main); box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    display: flex; align-items: center; gap: 12px;
+    transform: translateY(100px); opacity: 0; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 1000;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { border-color: var(--accent); }
+  .toast.error { border-color: var(--danger); }
 </style>
 </head>
 <body>
 
-<!-- SIDEBAR -->
-<aside class="sidebar">
-  <div class="sidebar-title">TROMANAGER</div>
-  <div class="sidebar-sub">Test Console</div>
-
-  <!-- Mode 1: New User -->
-  <div class="mode-header">
-    <span class="dot new"></span> Người dùng mới
-  </div>
-  <button class="mode-btn" id="modeNew" data-mode="new">
-    <span class="avatar">🧑</span>
-    <span>Khách vãng lai<small style="display:block;font-size:.65rem;opacity:.6;font-weight:400">Chưa có hồ sơ</small></span>
-  </button>
-
-  <!-- Mode 2: Registered -->
-  <div class="mode-header">
-    <span class="dot reg"></span> Khách thuê đã đăng ký
-  </div>
-  <button class="mode-btn" id="modeReg" data-mode="reg">
-    <span class="avatar">👤</span>
-    <span>Chọn khách thuê<small style="display:block;font-size:.65rem;opacity:.6;font-weight:400">Có hồ sơ &amp; lịch sử</small></span>
-  </button>
-  <div class="tenant-list" id="tenantList"></div>
-
-  <div class="quick-label">Truy vấn nhanh</div>
-  <button class="quick-btn" data-msg="Xin chào">👋 Xin chào</button>
-  <button class="quick-btn" data-msg="Xem hóa đơn tháng này">📄 Hóa đơn</button>
-  <button class="quick-btn" data-msg="Xem hợp đồng của tôi">📋 Hợp đồng</button>
-  <button class="quick-btn" data-msg="Lịch sử thanh toán">💳 Lịch sử TT</button>
-  <button class="quick-btn" data-msg="Phòng 101">🏠 Phòng của tôi</button>
-  <button class="quick-btn" data-msg="Liệt kê khách thuê">👥 Danh sách KT</button>
-  <button class="quick-btn" data-msg="Nhắc tôi đóng tiền phòng">⏰ Nhắc nhở</button>
-</aside>
-
-<!-- MAIN -->
-<div class="main">
-  <div class="meta-bar" id="metaBar">
-    <span id="modeLabel" style="color:var(--text-muted)">Chọn chế độ</span>
-    <span class="status" id="statusBadge"></span>
+  <!-- TOAST NOTIFICATION -->
+  <div id="toast" class="toast">
+    <span id="toast-icon"></span>
+    <span id="toast-msg">Notification</span>
   </div>
 
-  <div class="chat" id="chatArea">
-    <div class="welcome" id="welcome">
-      <div class="icon">🏢</div>
-      <h2>TroManager Test Console</h2>
-      <p>
-        Chọn <strong style="color:#b0a3f5">Người dùng mới</strong> để test luồng không có hồ sơ<br>
-        hoặc chọn <strong style="color:var(--teal)">Khách thuê đã đăng ký</strong> để test với hồ sơ &amp; lịch sử
-      </p>
+  <!-- SCREEN 1: LOGIN / ROLE SELECTION -->
+  <div id="login-screen" class="screen active">
+    <div class="login-container">
+      <div class="login-logo">T</div>
+      <h1 class="login-title">Hệ thống Quản lý Trọ</h1>
+      <p class="login-subtitle">Vui lòng chọn vai trò mô phỏng</p>
+      
+      <div class="role-cards">
+        <!-- Đăng ký (Người mới) -->
+        <div class="role-card" onclick="startApp('guest')">
+          <div class="role-icon">🧑‍💻</div>
+          <div class="role-info">
+            <h3>Đăng ký (Khách tìm phòng)</h3>
+            <p>Trải nghiệm luồng tư vấn tự động, báo giá, hỏi đáp phòng trống chưa cần tài khoản.</p>
+          </div>
+        </div>
+
+        <!-- Đăng nhập (Khách thuê) -->
+        <div class="role-card" onclick="toggleTenantSelect(event)">
+          <div class="role-icon">👤</div>
+          <div class="role-info" style="width: 100%;">
+            <h3>Đăng nhập (Khách thuê)</h3>
+            <p>Trải nghiệm luồng quản lý cá nhân, xem hóa đơn, nhắc nợ, báo sự cố.</p>
+            <select id="tenant-select" class="tenant-select" onchange="startApp('tenant', this.value)" onclick="event.stopPropagation()">
+              <option value="" disabled selected>-- Chọn tài khoản khách thuê --</option>
+              <option value="1">Nguyễn Văn Minh (Phòng 101)</option>
+              <option value="2">Trần Thị Hoa (Phòng 102)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Đăng nhập (Admin) -->
+        <div class="role-card" onclick="startApp('admin')">
+          <div class="role-icon">🛡️</div>
+          <div class="role-info">
+            <h3>Đăng nhập (Quản trị viên)</h3>
+            <p>Quản lý hệ thống Knowledge Base, huấn luyện RAG, theo dõi hệ thống.</p>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="input-area">
-    <textarea id="input" rows="1" placeholder="Nhập tin nhắn..." enterkeyhint="send"></textarea>
-    <button class="send-btn" id="sendBtn">Gửi</button>
+  <!-- SCREEN 2: CHAT INTERFACE (Guest / Tenant) -->
+  <div id="chat-screen" class="screen">
+    <div class="chat-header">
+      <div class="chat-profile">
+        <div class="chat-avatar" id="chat-avatar-text">G</div>
+        <div>
+          <div class="chat-name" id="chat-user-name">Khách vãng lai</div>
+          <div class="chat-role" id="chat-user-role">Đang tìm phòng</div>
+        </div>
+      </div>
+      <button class="btn btn-outline" onclick="logout()">Thoát</button>
+    </div>
+    
+    <div class="chat-body" id="chat-body">
+      <!-- Messages will appear here -->
+      <div class="msg ai">Xin chào! Tôi là Trợ lý AI của nhà trọ. Tôi có thể giúp gì cho bạn hôm nay?</div>
+    </div>
+    
+    <div class="chat-input-area">
+      <textarea id="chat-input" placeholder="Nhập tin nhắn..." onkeydown="handleChatEnter(event)"></textarea>
+      <button class="btn btn-primary" id="chat-send-btn" onclick="sendChatMessage()">Gửi</button>
+    </div>
   </div>
-</div>
+
+  <!-- SCREEN 3: ADMIN DASHBOARD -->
+  <div id="admin-screen" class="screen">
+    <!-- Sidebar: File List -->
+    <div class="admin-sidebar">
+      <div class="admin-header">
+        <h3>Knowledge Base</h3>
+        <button class="btn btn-primary" onclick="newKBFile()" style="padding: 6px 12px; font-size: 0.8rem;">+ Mới</button>
+      </div>
+      <div class="file-list" id="kb-file-list">
+        <!-- Files populated by JS -->
+      </div>
+      <div style="margin-top: auto; padding-top: 20px; text-align: center;">
+        <button class="btn btn-outline" style="width: 100%;" onclick="logout()">Đăng xuất Admin</button>
+      </div>
+    </div>
+
+    <!-- Main: Editor -->
+    <div class="admin-main">
+      <div class="editor-header">
+        <input type="text" id="kb-filepath" class="editor-path" placeholder="Ví dụ: rooms/101.md">
+        <div style="display: flex; gap: 12px;">
+          <button class="btn btn-danger" id="kb-delete-btn" onclick="deleteKBFile()">Xóa File</button>
+          <button class="btn btn-accent" onclick="saveKBFile()">Lưu & Cập nhật RAG</button>
+        </div>
+      </div>
+      <div class="editor-body">
+        <textarea id="kb-editor" class="editor-textarea" placeholder="Nhập nội dung markdown vào đây...
+        
+Ví dụ:
+# Thông tin phòng 101
+- Giá: 3,000,000 VNĐ
+- Diện tích: 25m2
+- Nội thất: Cơ bản"></textarea>
+      </div>
+    </div>
+  </div>
 
 <script>
-// ===== STATE =====
-const state = {
-  mode: null,        // 'new' | 'reg'
-  tenantId: null,    // 1-5 or null for new
-  loading: false,
+// --- GLOBAL STATE ---
+let currentSession = {
+  role: null, // 'guest', 'tenant', 'admin'
+  tenantId: null,
+  sessionId: 'sess_' + Math.random().toString(36).substring(2, 9),
+  chatHistory: []
 };
 
-const TENANTS = [
-  { id: 1, name: 'Nguyễn Văn Minh', room: '101' },
-  { id: 2, name: 'Trần Thị Hoa',   room: '102' },
-  { id: 3, name: 'Lê Hoàng Anh',    room: '103' },
-  { id: 4, name: 'Phạm Minh Tâm',  room: '104' },
-  { id: 5, name: 'Đỗ Thu Hương',   room: '105' },
-];
+let kbFiles = [];
+let currentKbFile = null;
 
-// ===== DOM REFS =====
-const chatArea = document.getElementById('chatArea');
-const welcome = document.getElementById('welcome');
-const input = document.getElementById('input');
-const sendBtn = document.getElementById('sendBtn');
-const metaBar = document.getElementById('metaBar');
-const statusBadge = document.getElementById('statusBadge');
-const modeLabel = document.getElementById('modeLabel');
-const modeNewBtn = document.getElementById('modeNew');
-const modeRegBtn = document.getElementById('modeReg');
-const tenantList = document.getElementById('tenantList');
-
-// ===== RENDER =====
-function renderTenants() {
-  tenantList.innerHTML = TENANTS.map(t => `
-    <button class="tenant-btn ${state.mode === 'reg' && state.tenantId === t.id ? 'active' : ''}"
-            data-id="${t.id}">
-      <span>${t.name}</span>
-      <span class="tag">${t.room}</span>
-    </button>
-  `).join('');
-  tenantList.querySelectorAll('.tenant-btn').forEach(btn => {
-    btn.addEventListener('click', () => selectTenant(parseInt(btn.dataset.id)));
-  });
+// --- UI HELPERS ---
+function showScreen(screenId) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(screenId).classList.add('active');
 }
 
-function updateSidebar() {
-  // Mode buttons
-  modeNewBtn.className = 'mode-btn' + (state.mode === 'new' ? ' active-new' : '');
-  modeRegBtn.className = 'mode-btn' + (state.mode === 'reg' ? ' active-reg' : '');
-  renderTenants();
+function showToast(msg, type='success') {
+  const toast = document.getElementById('toast');
+  const icon = document.getElementById('toast-icon');
+  const text = document.getElementById('toast-msg');
+  
+  toast.className = `toast show ${type}`;
+  icon.textContent = type === 'success' ? '✅' : '❌';
+  text.textContent = msg;
+  
+  setTimeout(() => { toast.classList.remove('show'); }, 3000);
 }
 
-function updateMeta(html, status = '') {
-  const mode = state.mode;
-  let badge = '';
-  if (mode === 'new') {
-    badge = '<span class="mode-badge new">🧑 Người dùng mới</span>';
-  } else if (mode === 'reg') {
-    const t = TENANTS.find(x => x.id === state.tenantId);
-    badge = `<span class="mode-badge reg">👤 ${t ? t.name : '...'}</span>`;
+// --- LOGIN LOGIC ---
+function toggleTenantSelect(e) {
+  const select = document.getElementById('tenant-select');
+  select.style.display = select.style.display === 'block' ? 'none' : 'block';
+}
+
+function startApp(role, tenantId = null) {
+  currentSession.role = role;
+  
+  if (role === 'guest') {
+    currentSession.tenantId = null;
+    setupChatUI('G', 'Khách tìm phòng (Chưa đăng ký)', 'Luồng Tư vấn');
+    showScreen('chat-screen');
+  } else if (role === 'tenant') {
+    currentSession.tenantId = parseInt(tenantId);
+    const names = { 1: 'Nguyễn Văn Minh', 2: 'Trần Thị Hoa' };
+    const rooms = { 1: 'Phòng 101', 2: 'Phòng 102' };
+    setupChatUI(names[tenantId].charAt(0), names[tenantId], rooms[tenantId]);
+    showScreen('chat-screen');
+  } else if (role === 'admin') {
+    showScreen('admin-screen');
+    fetchKBFiles();
   }
-  metaBar.innerHTML = badge + ' ' + html;
-  statusBadge.textContent = status;
-  statusBadge.className = 'status' + (status === 'OK' ? ' ok' : status === 'ERR' ? ' err' : '');
 }
 
-// ===== MODE SELECTION =====
-function setMode(mode) {
-  state.mode = mode;
-  if (mode === 'new') {
-    state.tenantId = null;
+function logout() {
+  currentSession = { role: null, tenantId: null, sessionId: 'sess_' + Math.random().toString(36).substring(2, 9) };
+  document.getElementById('chat-body').innerHTML = '<div class="msg ai">Xin chào! Tôi là Trợ lý AI của nhà trọ. Tôi có thể giúp gì cho bạn hôm nay?</div>';
+  document.getElementById('tenant-select').value = "";
+  document.getElementById('tenant-select').style.display = 'none';
+  showScreen('login-screen');
+}
+
+// --- CHAT LOGIC ---
+function setupChatUI(avatarLetter, name, subText) {
+  document.getElementById('chat-avatar-text').textContent = avatarLetter;
+  document.getElementById('chat-user-name').textContent = name;
+  document.getElementById('chat-user-role').textContent = subText;
+}
+
+function appendMessage(role, content, metaHtml = '') {
+  const body = document.getElementById('chat-body');
+  const msgDiv = document.createElement('div');
+  msgDiv.className = `msg ${role}`;
+  
+  if (role === 'ai') {
+    msgDiv.innerHTML = (metaHtml ? metaHtml + '<br>' : '') + marked.parse(content);
   } else {
-    // Default to first tenant
-    state.tenantId = TENANTS[0].id;
+    msgDiv.textContent = content;
+    if (metaHtml) {
+      msgDiv.innerHTML = metaHtml + '<br>' + msgDiv.innerHTML;
+    }
   }
-  updateSidebar();
-  updateMeta('', '');
-  // Enable input
-  input.disabled = false;
-  input.placeholder = mode === 'new' ? 'Nhập tin nhắn với tư cách khách vãng lai...' : `Nhập tin nhắn với tư cách ${TENANTS.find(t => t.id === state.tenantId).name}...`;
-  input.focus();
-}
-
-function selectTenant(id) {
-  if (state.mode !== 'reg') setMode('reg');
-  state.tenantId = id;
-  updateSidebar();
-  const t = TENANTS.find(x => x.id === id);
-  updateMeta('', '');
-  input.placeholder = `Nhập tin nhắn với tư cách ${t.name}...`;
-  input.focus();
-}
-
-modeNewBtn.addEventListener('click', () => setMode('new'));
-modeRegBtn.addEventListener('click', () => setMode('reg'));
-
-// ===== CHAT =====
-function addMessage(role, content, meta = null) {
-  welcome?.remove();
-  const div = document.createElement('div');
-  div.className = `msg ${role}`;
-  if (meta && meta.tool) {
-    div.innerHTML = `<span class="tool-badge">⚙ ${meta.tool} ${meta.latency ? ' · ' + meta.latency + 'ms' : ''}</span><br>` + content;
-  } else {
-    div.textContent = content;
-  }
-  chatArea.appendChild(div);
-  chatArea.scrollTop = chatArea.scrollHeight;
+  
+  body.appendChild(msgDiv);
+  body.scrollTop = body.scrollHeight;
 }
 
 function showTyping() {
-  welcome?.remove();
-  const el = document.createElement('div');
-  el.className = 'typing';
-  el.id = 'typingIndicator';
-  el.innerHTML = '<span></span><span></span><span></span>';
-  chatArea.appendChild(el);
-  chatArea.scrollTop = chatArea.scrollHeight;
+  const body = document.getElementById('chat-body');
+  const typingDiv = document.createElement('div');
+  typingDiv.className = 'typing';
+  typingDiv.id = 'typing-indicator';
+  typingDiv.innerHTML = '<span></span><span></span><span></span>';
+  body.appendChild(typingDiv);
+  body.scrollTop = body.scrollHeight;
 }
 
 function hideTyping() {
-  document.getElementById('typingIndicator')?.remove();
+  const indicator = document.getElementById('typing-indicator');
+  if (indicator) indicator.remove();
 }
 
-async function sendMessage(msg) {
-  if (state.loading || !msg.trim() || !state.mode) return;
-
-  if (!state.mode) {
-    addMessage('ai', '⚠️ Vui lòng chọn chế độ: Người dùng mới hoặc Khách thuê đã đăng ký');
-    return;
+function handleChatEnter(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendChatMessage();
   }
+}
 
-  state.loading = true;
-  sendBtn.disabled = true;
+async function sendChatMessage() {
+  const inputEl = document.getElementById('chat-input');
+  const msg = inputEl.value.trim();
+  if (!msg) return;
 
-  addMessage('user', msg.trim());
+  inputEl.value = '';
+  appendMessage('user', msg);
   showTyping();
-  input.value = '';
-  input.style.height = 'auto';
+  
+  const payload = {
+    source: 'web_simulation',
+    message: msg,
+    session_id: currentSession.sessionId
+  };
+  if (currentSession.tenantId) {
+    payload.tenant_id = currentSession.tenantId;
+  }
 
   try {
-    const body = {
-      source: 'api',
-      message: msg.trim(),
-    };
-    if (state.mode === 'reg' && state.tenantId) {
-      body.tenant_id = state.tenantId;
-    }
-
-    const res = await fetch('/chat', {
+    const res = await fetch('http://localhost:8000/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload)
     });
-
+    
     hideTyping();
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    
     const data = await res.json();
-
-    if (data.answer) {
-      const tools = data.tools_used || [];
-      const actions = data.actions_taken || [];
-      const latency = data.latency_ms || 0;
-      const conf = data.confidence || 0;
-      const sys = data.system_used || '';
-
-      let metaHtml = '';
-      if (sys) metaHtml += `<span class="tag" style="color:var(--accent)">${sys}</span> `;
-      if (tools.length) {
-        metaHtml += tools.map(t => `<span class="tag tool">⚙ ${t}</span>`).join(' ');
-      }
-      if (actions.length) {
-        metaHtml += actions.map(a => `<span class="tag action">✓ ${a}</span>`).join(' ');
-      }
-      metaHtml += `<span class="latency">${latency}ms</span>`;
-      if (conf) metaHtml += `<span class="latency">· conf ${(conf*100).toFixed(0)}%</span>`;
-
-      updateMeta(metaHtml, tools.length ? 'TOOLS' : 'OK');
-
-      addMessage('ai', data.answer, tools.length ? { tool: tools.join(', '), latency } : null);
-    } else {
-      updateMeta('', 'ERR');
-      addMessage('ai', '⚠️ Không nhận được phản hồi từ server');
+    currentSession.sessionId = data.session_id; // Keep tracking session
+    
+    // Build Meta UI
+    let meta = '';
+    if (data.system_used) meta += `<span class="meta-tag">🧠 ${data.system_used}</span>`;
+    if (data.tools_used && data.tools_used.length > 0) {
+      data.tools_used.forEach(t => meta += `<span class="meta-tag">⚙️ ${t}</span>`);
     }
+    meta += `<span class="meta-tag">⏱️ ${data.latency_ms}ms</span>`;
+    
+    appendMessage('ai', data.answer, meta);
   } catch (err) {
     hideTyping();
-    updateMeta('', 'ERR');
-    addMessage('ai', '⚠️ Lỗi kết nối: ' + err.message);
+    appendMessage('ai', 'Lỗi kết nối đến Server: ' + err.message);
   }
-
-  state.loading = false;
-  sendBtn.disabled = false;
-  input.focus();
 }
 
-// ===== INPUT EVENTS =====
-input.addEventListener('input', () => {
-  input.style.height = 'auto';
-  input.style.height = Math.min(input.scrollHeight, 120) + 'px';
-});
-input.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input.value); }
-});
-sendBtn.addEventListener('click', () => sendMessage(input.value));
+// --- ADMIN KNOWLEDGE BASE LOGIC ---
 
-// ===== QUICK BUTTONS =====
-document.querySelectorAll('.quick-btn[data-msg]').forEach(btn => {
-  btn.addEventListener('click', () => sendMessage(btn.dataset.msg));
-});
+function formatBytes(bytes, decimals = 2) {
+    if (!+bytes) return '0 Bytes';
+    const k = 1024, dm = decimals < 0 ? 0 : decimals, sizes = ['B', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+}
 
-// ===== INIT =====
-renderTenants();
-setMode('reg'); // Default to registered mode
-input.disabled = true;
+async function fetchKBFiles() {
+  try {
+    const res = await fetch('http://localhost:8000/api/kb/');
+    if (!res.ok) throw new Error('Cannot fetch files');
+    kbFiles = await res.json();
+    renderKBFileList();
+  } catch(e) {
+    showToast('Lỗi tải danh sách Knowledge Base', 'error');
+  }
+}
+
+function renderKBFileList() {
+  const listEl = document.getElementById('kb-file-list');
+  listEl.innerHTML = '';
+  
+  kbFiles.forEach(f => {
+    const div = document.createElement('div');
+    div.className = `file-item ${currentKbFile === f.path ? 'active' : ''}`;
+    div.innerHTML = `
+      <span class="file-name">📄 ${f.path}</span>
+      <span class="file-size">${formatBytes(f.size)}</span>
+    `;
+    div.onclick = () => loadKBFile(f.path);
+    listEl.appendChild(div);
+  });
+}
+
+async function loadKBFile(path) {
+  try {
+    const res = await fetch(`http://localhost:8000/api/kb/file?path=${encodeURIComponent(path)}`);
+    if (!res.ok) throw new Error('Cannot load file');
+    const data = await res.json();
+    
+    currentKbFile = path;
+    document.getElementById('kb-filepath').value = path;
+    document.getElementById('kb-editor').value = data.content;
+    document.getElementById('kb-delete-btn').style.display = 'block';
+    
+    renderKBFileList(); // update active state
+  } catch(e) {
+    showToast('Lỗi tải nội dung file', 'error');
+  }
+}
+
+function newKBFile() {
+  currentKbFile = null;
+  document.getElementById('kb-filepath').value = '';
+  document.getElementById('kb-editor').value = '';
+  document.getElementById('kb-delete-btn').style.display = 'none';
+  renderKBFileList(); // clear active state
+}
+
+async function saveKBFile() {
+  const path = document.getElementById('kb-filepath').value.trim();
+  const content = document.getElementById('kb-editor').value;
+  
+  if (!path) {
+    showToast('Vui lòng nhập đường dẫn file (VD: faq.md)', 'error');
+    return;
+  }
+  
+  try {
+    const res = await fetch('http://localhost:8000/api/kb/file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, content })
+    });
+    
+    if (!res.ok) throw new Error('Save failed');
+    showToast(`Đã lưu ${path} và cập nhật RAG!`, 'success');
+    currentKbFile = path;
+    await fetchKBFiles();
+  } catch(e) {
+    showToast('Lỗi khi lưu file', 'error');
+  }
+}
+
+async function deleteKBFile() {
+  const path = document.getElementById('kb-filepath').value.trim();
+  if (!path) return;
+  
+  if (!confirm(`Bạn có chắc chắn muốn xóa ${path} không? RAG sẽ bị ảnh hưởng.`)) return;
+  
+  try {
+    const res = await fetch(`http://localhost:8000/api/kb/file?path=${encodeURIComponent(path)}`, {
+      method: 'DELETE'
+    });
+    
+    if (!res.ok) throw new Error('Delete failed');
+    showToast(`Đã xóa ${path} và cập nhật RAG!`, 'success');
+    newKBFile();
+    await fetchKBFiles();
+  } catch(e) {
+    showToast('Lỗi khi xóa file', 'error');
+  }
+}
 </script>
 </body>
 </html>

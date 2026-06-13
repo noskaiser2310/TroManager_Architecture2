@@ -92,6 +92,8 @@ class ConversationMemory:
         if not session_id:
             session_id = self.new_session_id()
 
+        db_tenant_id = tenant_id if tenant_id and tenant_id > 0 else None
+
         sql = """
         INSERT INTO conversation_history (
             tenant_id, session_id, source,
@@ -103,7 +105,7 @@ class ConversationMemory:
         RETURNING conversation_id
         """
         params = [
-            tenant_id,
+            db_tenant_id,
             session_id,
             source,
             user_message,
@@ -141,7 +143,7 @@ class ConversationMemory:
         """
         sql = """
         SELECT * FROM conversation_history
-        WHERE tenant_id = $1
+        WHERE tenant_id = $1 AND timestamp > CURRENT_TIMESTAMP - INTERVAL '4 hours'
         ORDER BY timestamp DESC
         LIMIT $2
         """

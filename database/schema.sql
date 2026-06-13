@@ -216,7 +216,7 @@ CREATE TABLE user_embeddings (
 );
 
 CREATE INDEX idx_user_emb_tenant ON user_embeddings(tenant_id);
-CREATE INDEX idx_user_emb_ivfflat ON user_embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+-- Removed ivfflat index for 3072 dims
 CREATE INDEX idx_user_emb_archived ON user_embeddings(is_archived);
 
 -- =====================================================================
@@ -234,7 +234,7 @@ CREATE TABLE semantic_cache (
     expires_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP + INTERVAL '30 days')
 );
 
-CREATE INDEX idx_cache_ivfflat ON semantic_cache USING ivfflat (query_embedding vector_cosine_ops) WITH (lists = 100);
+-- Removed ivfflat index for 3072 dims
 CREATE INDEX idx_cache_last_accessed ON semantic_cache(last_accessed);
 CREATE INDEX idx_cache_expires ON semantic_cache(expires_at);
 
@@ -573,8 +573,8 @@ $$ LANGUAGE plpgsql;
 
 -- Insert sample rooms
 INSERT INTO rooms (room_number, floor, area_m2, monthly_rent, status) VALUES
-('101', 1, 20.0, 3000000, 'occupied'),
-('102', 1, 25.0, 3500000, 'occupied'),
+('101', 1, 25.0, 3500000, 'occupied'),
+('102', 1, 30.0, 4500000, 'occupied'),
 ('103', 1, 20.0, 3000000, 'available'),
 ('201', 2, 22.0, 3200000, 'occupied'),
 ('202', 2, 28.0, 4000000, 'available'),
@@ -586,23 +586,23 @@ INSERT INTO rooms (room_number, floor, area_m2, monthly_rent, status) VALUES
 -- Insert sample tenants
 INSERT INTO user_profiles (full_name, phone_number, room_id, lease_start, lease_end, tone_preference) VALUES
 ('Nguyễn Văn Minh', '0901234567', 1, '2024-01-15', '2026-12-31', 'friendly'),
-('Trần Thị Lan', '0902345678', 2, '2025-03-01', '2026-08-31', 'professional'),
+('Trần Thị Hoa', '0902345678', 2, '2025-03-01', '2026-08-31', 'professional'),
 ('Lê Hoàng Tuấn', '0903456789', 4, '2024-06-01', '2026-05-31', 'friendly'),
-('Phạm Thị Hoa', '0904567890', 7, '2025-01-10', '2026-07-10', 'strict'),
+('Phạm Thị Lan', '0904567890', 7, '2025-01-10', '2026-07-10', 'strict'),
 ('Đỗ Văn Hùng', '0905678901', 8, '2024-09-01', '2026-09-01', 'professional');
 
 -- Insert sample contracts
 INSERT INTO contracts (tenant_id, room_id, start_date, end_date, deposit_amount, monthly_rent, status) VALUES
-(1, 1, '2024-01-15', '2026-12-31', 6000000, 3000000, 'active'),
-(2, 2, '2025-03-01', '2026-08-31', 7000000, 3500000, 'active'),
+(1, 1, '2024-01-15', '2026-12-31', 7000000, 3500000, 'active'),
+(2, 2, '2025-03-01', '2026-08-31', 9000000, 4500000, 'active'),
 (3, 4, '2024-06-01', '2026-05-31', 6400000, 3200000, 'active'),
 (4, 7, '2025-01-10', '2026-07-10', 7000000, 3500000, 'active'),
 (5, 8, '2024-09-01', '2026-09-01', 9000000, 4500000, 'active');
 
 -- Insert sample invoices (tháng hiện tại)
 INSERT INTO invoices (tenant_id, room_id, contract_id, invoice_month, base_rent, electricity_kwh, electricity_cost, water_m3, water_cost, service_fee, total_amount, due_date, status) VALUES
-(1, 1, 1, '2026-06-01', 3000000, 100, 350000, 5, 500000, 50000, 3900000, '2026-06-05', 'unpaid'),
-(2, 2, 2, '2026-06-01', 3500000, 120, 420000, 6, 600000, 50000, 4570000, '2026-06-05', 'unpaid'),
+(1, 1, 1, '2026-06-01', 3500000, 100, 350000, 5, 500000, 50000, 4400000, '2026-06-05', 'unpaid'),
+(2, 2, 2, '2026-06-01', 4500000, 120, 420000, 6, 600000, 50000, 5570000, '2026-06-05', 'unpaid'),
 (3, 4, 3, '2026-06-01', 3200000, 80, 280000, 4, 400000, 50000, 3930000, '2026-06-05', 'paid'),
 (4, 7, 4, '2026-06-01', 3500000, 90, 315000, 5, 500000, 50000, 4365000, '2026-06-05', 'overdue'),
 (5, 8, 5, '2026-06-01', 4500000, 110, 385000, 7, 700000, 50000, 5635000, '2026-06-05', 'unpaid');
@@ -627,12 +627,12 @@ INSERT INTO user_embeddings (tenant_id, memory_text, embedding) VALUES
 (3, 'Khách ở lâu dài, có ý định gia hạn hợp đồng', array_fill(0.4, ARRAY[3072])::vector),
 (4, 'Khách thanh toán thường xuyên trễ, cần nhắc nhở', array_fill(0.5, ARRAY[3072])::vector);
 
--- Insert sample semantic cache
+-- Insert sample semantic cache based on Knowledge Base
 INSERT INTO semantic_cache (query_text, query_embedding, response_text) VALUES
-('Wifi mật khẩu gì', array_fill(0.6, ARRAY[3072])::vector, 'Mật khẩu wifi là: trohai2026'),
-('Giờ giấc yên tĩnh', array_fill(0.7, ARRAY[3072])::vector, 'Giờ yên tĩnh từ 22h đến 6h sáng hôm sau'),
-('Phí gửi xe bao nhiêu', array_fill(0.8, ARRAY[3072])::vector, 'Phí gửi xe máy: 100.000đ/tháng, xe đạp: 50.000đ/tháng'),
-('Có cho nuôi thú cưng không', array_fill(0.9, ARRAY[3072])::vector, 'Hiện tại nhà trọ không cho phép nuôi thú cưng để đảm bảo vệ sinh chung');
+('Mật khẩu wifi là gì', array_fill(0.6, ARRAY[3072])::vector, 'Mật khẩu wifi được cấp riêng khi bạn nhận phòng. Bạn có thể xem trong hồ sơ hoặc liên hệ quản lý (0901-234-567) để được cấp lại. Tên mạng: TROHAIDANG_5G hoặc TROHAIDANG_2.4G.'),
+('Giờ yên tĩnh là mấy giờ', array_fill(0.7, ARRAY[3072])::vector, 'Khung giờ yên tĩnh tuyệt đối là từ 22:00 - 06:00 (T2-T6) và 22:00 - 07:00 (Cuối tuần). Vui lòng không hát karaoke hay gây ồn ào. Nếu vi phạm có thể bị phạt 200k.'),
+('Phí gửi xe máy bao nhiêu', array_fill(0.8, ARRAY[3072])::vector, 'Phí gửi xe máy là 100.000đ/tháng. Đối với xe điện là 150.000đ/tháng (đã bao gồm sạc). Vị trí gửi ở tầng hầm, ra vào 24/7.'),
+('Mấy giờ nhà trọ đóng cửa', array_fill(0.9, ARRAY[3072])::vector, 'Giờ đóng cửa chính là 23:00. Nếu bạn về sau 23:00, vui lòng đi cổng phụ và tự khóa cổng lại cẩn thận nhé.');
 
 -- =====================================================================
 -- 17. COMMENTS
@@ -642,8 +642,8 @@ COMMENT ON TABLE user_profiles IS 'Hồ sơ tường minh của khách thuê';
 COMMENT ON TABLE behavior_logs IS 'Lịch sử hành vi - dùng cho personalization';
 COMMENT ON TABLE user_embeddings IS 'Vector semantic memory - đúc kết sở thích từ behavior';
 COMMENT ON TABLE semantic_cache IS 'Cache Q&A cho System 1 Fast Layer';
-COMMENT ON COLUMN user_embeddings.embedding IS 'Vector 768-dim từ nomic-embed-text';
-COMMENT ON COLUMN semantic_cache.query_embedding IS 'Vector 768-dim từ nomic-embed-text';
+COMMENT ON COLUMN user_embeddings.embedding IS 'Vector 3072-dim từ nomic-embed-text';
+COMMENT ON COLUMN semantic_cache.query_embedding IS 'Vector 3072-dim từ nomic-embed-text';
 
 -- =====================================================================
 -- END OF SCHEMA

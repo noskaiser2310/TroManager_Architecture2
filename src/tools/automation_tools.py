@@ -1,11 +1,5 @@
 """
 Automation Toolkit - Gửi thông báo và tạo tickets.
-
-Tất cả tools thực hiện thật:
-- Gọi Zalo OA API
-- Gọi SMS API
-- INSERT vào database
-- Log behavior
 """
 
 from __future__ import annotations
@@ -38,11 +32,14 @@ async def _log_behavior(tenant_id: int, action_type: str, description: str, meta
 
 
 def _generate_ticket_code() -> str:
-    """Generate mã ticket TKT-YYYY-NNNN."""
-    import random
+    """Generate mã ticket TKT-YYYY-XXXXXXXX (cryptographically unique).
+    
+    Dùng secrets thay vì random.randint để tránh collision và predictability.
+    """
+    import secrets
     year = datetime.now().year
-    num = random.randint(1000, 9999)
-    return f"TKT-{year}-{num}"
+    unique_part = secrets.token_hex(3).upper()  # 6 ký tự hex = 16^6 = 16M combinations
+    return f"TKT-{year}-{unique_part}"
 
 
 # ============ Tool 1: send_zalo ============

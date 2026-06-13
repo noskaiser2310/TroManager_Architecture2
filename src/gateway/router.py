@@ -106,7 +106,8 @@ class RouterGateway:
         # Step 3: Decision logic
         if match.category == "sensitive" or match.confidence > self.threshold:
             target = TargetSystem.SYSTEM2
-            priority = Priority.NORMAL if match.category == "sensitive" else Priority.NORMAL
+            # Sensitive (nợ, hợp đồng, v.v.) → ưu tiên cao; complex → bình thường
+            priority = Priority.HIGH if match.category == "sensitive" else Priority.NORMAL
             reasoning = f"Phát hiện keyword nhạy cảm/phức tạp: {match.matched_keywords}"
         else:
             target = TargetSystem.SYSTEM1
@@ -114,22 +115,26 @@ class RouterGateway:
             reasoning = "Câu hỏi đơn giản, có thể xử lý bằng System 1"
         
         # Special case: Quá ngắn (< 3 chars) → System 1
+        # Dùng biến local confidence thay vì match.confidence để RouteDecision phản ánh đúng
+        final_confidence = match.confidence
         if len(request.query.strip()) < 3:
             target = TargetSystem.SYSTEM1
+            priority = Priority.NORMAL
             reasoning = "Tin nhắn quá ngắn - System 1 xử lý"
-            confidence = 0.6
+            final_confidence = 0.6
         
         # Special case: Quá dài (> 500 chars) → System 2 (cần context nhiều)
         if len(request.query) > 500:
             target = TargetSystem.SYSTEM2
+            priority = priority if priority == Priority.HIGH else Priority.NORMAL
             reasoning = "Câu hỏi phức tạp/dài - System 2 xử lý"
-            confidence = max(match.confidence, 0.7)
+            final_confidence = max(match.confidence, 0.7)
         
         decision = RouteDecision(
             target_system=target,
             priority=priority,
             reasoning=reasoning,
-            confidence=match.confidence,
+            confidence=final_confidence,  # dùng final_confidence, không phải match.confidence cứng
             matched_keywords=match.matched_keywords,
             intent=match.intent,
             fallback_on_failure=TargetSystem.SYSTEM2,
@@ -160,6 +165,14 @@ def create_default_router(config: Optional[dict] = None) -> RouterGateway:
                 "hỏng", "sửa", "bảo trì", "điều hòa",
                 "tìm phòng", "phòng trống",
                 "tư vấn", "đề xuất", "gợi ý",
+                "phòng", "giá", "diện tích",
+                "nội quy", "quy định", "chính sách",
+            ],
+            "safe_keywords": [
+                "chào", "xin chào", "hello", "hi",
+                "cảm ơn", "thanks", "ok", "dạ", "vâng",
+                "wifi", "mật khẩu wifi", "pass wifi",
+                "rác", "đổ rác",
             ],
             "threshold_confidence": 0.5,
         }
