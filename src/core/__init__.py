@@ -50,6 +50,7 @@ def get_knowledge_lookup():
         raise RuntimeError(
             "Knowledge lookup not initialized. "
             "Call set_knowledge_lookup() in app lifespan startup."
+        )
 
 
 # ============ Notifications ============

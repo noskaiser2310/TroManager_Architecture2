@@ -15,6 +15,7 @@ from openai import AsyncOpenAI, APIError, RateLimitError, APITimeoutError
 
 from .config_loader import LLMConfig, load_llm_config
 from .thought_stripper import strip_thought_blocks, has_thought_block, extract_thought_and_answer
+from .key_rotator import KeyRotator
 
 logger = logging.getLogger(__name__)
 
@@ -65,44 +66,65 @@ class LLMClient:
         ])
     """
     
-    def __init__(self, config: Optional[LLMConfig] = None, model: Optional[str] = None):
+    def __init__(
+        self,
+        config: Optional[LLMConfig] = None,
+        model: Optional[str] = None,
+        key_rotator: Optional[KeyRotator] = None,
+    ):
         """
         Args:
             config: LLMConfig. Nếu None sẽ auto-load từ file.
             model: Tên model cụ thể (flash hoặc pro). Nếu None sẽ dùng flash.
+            key_rotator: KeyRotator để tự động xoay key khi gặp 429.
         """
         if config is None:
             config = load_llm_config()
         self.config = config
         self.model_name = model or config.flash_model
+        self._base_url = config.llm.base_url
+        self._request_timeout = config.llm.request_timeout
+        self._max_retries = config.llm.max_retries
+
+        # Key rotation
+        self._key_rotator = key_rotator or KeyRotator.from_env()
+        self._current_key = self._key_rotator.get_key()
 
         # Khởi tạo OpenAI client
-        if not config.llm.api_key:
+        if not self._current_key or self._current_key == "MISSING_API_KEY":
             logger.warning(
                 "LLM api_key chưa được set. Set GEMINI_API_KEY env var "
                 "hoặc tạo file config/llm_config.local.yaml"
             )
 
-        self._client = AsyncOpenAI(
-            api_key=config.llm.api_key or "MISSING_API_KEY",
-            base_url=config.llm.base_url,
-            timeout=config.llm.request_timeout,
-            max_retries=config.llm.max_retries,
-        )
+        self._client = self._build_client(self._current_key)
 
         # Thought stripping: bật mặc định cho thinking models
-        # Có thể tắt qua config: extra.strip_thought = false
         self._strip_thought = config.llm.extra.get("strip_thought", True)
 
         logger.info(
             f"LLMClient initialized: model={self.model_name}, "
-            f"base_url={config.llm.base_url}, "
+            f"base_url={self._base_url}, "
+            f"keys={self._key_rotator.key_count}, "
             f"strip_thought={self._strip_thought}"
         )
+
+    def _build_client(self, api_key: str) -> AsyncOpenAI:
+        return AsyncOpenAI(
+            api_key=api_key,
+            base_url=self._base_url,
+            timeout=self._request_timeout,
+            max_retries=self._max_retries,
+        )
+
+    def _on_key_rotated(self, new_key: str):
+        """Recreate client when key rotates."""
+        self._current_key = new_key
+        self._client = self._build_client(new_key)
     
     def with_model(self, model: str) -> "LLMClient":
         """Tạo client mới với model khác (flash/pro)."""
-        return LLMClient(config=self.config, model=model)
+        return LLMClient(config=self.config, model=model, key_rotator=self._key_rotator)
     
     def for_flash(self) -> "LLMClient":
         """Client dùng flash model (System 1)."""
@@ -158,19 +180,32 @@ class LLMClient:
         max_retries = 5
         retry_delay = self.config.llm.retry_delay or 1.0
         response = None
+        key_rotated = False
         for attempt in range(max_retries):
             try:
                 response = await self._client.chat.completions.create(**params)
+                if key_rotated:
+                    self._key_rotator.mark_success()
                 break
             except RateLimitError as e:
                 err_msg = str(e).lower()
                 if "quota" in err_msg or "exceeded your current quota" in err_msg:
-                    logger.error(f"Daily LLM quota limit exceeded (RESOURCE_EXHAUSTED). Failing fast: {e}")
-                    raise
+                    # Try rotate to next key
+                    if self._key_rotator.key_count > 1 and not key_rotated:
+                        new_key = await self._key_rotator.on_error(str(e))
+                        self._on_key_rotated(new_key)
+                        key_rotated = True
+                        logger.info(f"Quota exhausted, rotated to key #{self._key_rotator.current_index}. Retrying...")
+                        continue
+                    elif key_rotated:
+                        logger.error(f"All keys exhausted. Giving up: {e}")
+                        raise
+                    else:
+                        logger.error(f"Only 1 key available. Quota exhausted: {e}")
+                        raise
                 if attempt == max_retries - 1:
                     logger.error(f"Rate limit hit on final attempt: {e}")
                     raise
-                # Parse retry duration from Gemini error message
                 import re
                 wait_time = retry_delay * (2 ** attempt)
                 match = re.search(r"retry in ([\d\.]+)s", str(e))

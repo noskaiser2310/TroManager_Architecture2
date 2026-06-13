@@ -6,7 +6,7 @@ async def update():
         host=os.environ.get('DB_HOST','localhost'),
         port=int(os.environ.get('DB_PORT','5432')),
         user=os.environ.get('DB_USER','postgres'),
-        password=os.environ.get('DB_PASSWORD','123456'),
+        password=os.environ.get('DB_PASSWORD',''),
         database=os.environ.get('DB_NAME','tromanager')
     )
 

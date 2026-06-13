@@ -107,13 +107,11 @@ class RateLimiter:
         """Xóa toàn bộ tracking (dùng cho admin/test)."""
         async with self._lock:
             self._buckets.clear()
-        """Reset bucket cho key (testing/admin)."""
-        async with self._lock:
-            self._buckets.pop(key, None)
 
-    def get_stats(self, key: str) -> dict:
+    async def get_stats(self, key: str) -> dict:
         """Lấy stats hiện tại của key (cho admin endpoint)."""
-        bucket = self._buckets.get(key, deque())
+        async with self._lock:
+            bucket = self._buckets.get(key, deque())
         now = time.time()
         minute_ago = now - 60
         hour_ago = now - 3600

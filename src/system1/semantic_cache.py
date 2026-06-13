@@ -31,7 +31,7 @@ class SemanticCache:
     - Hit count tracking
     """
     
-    def __init__(self, db_pool: asyncpg.Pool, embedding_dim: int = 768):
+    def __init__(self, db_pool: asyncpg.Pool, embedding_dim: int = 3072):
         self.db = db_pool
         self.embedding_dim = embedding_dim
     

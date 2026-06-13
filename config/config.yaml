@@ -322,7 +322,7 @@ monitoring:
 # Security
 # =========================================================
 security:
-  encrypt_pii: true
+  encrypt_pii: false  # TODO: implement PII encryption (AES-GCM) before production
   pii_fields:
     - "phone_number"
     - "email"
@@ -331,6 +331,5 @@ security:
     requests_per_minute: 60
     requests_per_hour: 1000
     
-  api_keys:
-    - "${API_KEY_1}"
-    - "${API_KEY_2}"
+  # API keys: add to .env as ADMIN_API_KEY (see admin auth middleware)
+  api_keys: []

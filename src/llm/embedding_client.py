@@ -12,6 +12,7 @@ from typing import Optional
 from openai import AsyncOpenAI
 
 from .config_loader import LLMConfig, load_llm_config
+from .key_rotator import KeyRotator
 
 logger = logging.getLogger(__name__)
 
@@ -26,23 +27,25 @@ class EmbeddingClient:
         vectors = await client.encode_batch(["text1", "text2"])
     """
     
-    def __init__(self, config: Optional[LLMConfig] = None):
+    def __init__(self, config: Optional[LLMConfig] = None, key_rotator: Optional[KeyRotator] = None):
         if config is None:
             config = load_llm_config()
         self.config = config
         self.model = config.embedding.model
         self.dimension = config.embedding_dim
-        
-        if not config.embedding.api_key:
+        self._base_url = config.embedding.base_url
+        self._request_timeout = config.embedding.request_timeout
+
+        # Key rotation (dùng chung rotator với LLM hoặc tạo riêng)
+        self._key_rotator = key_rotator or KeyRotator.from_env()
+        self._current_key = self._key_rotator.get_key()
+
+        if not self._current_key or self._current_key == "MISSING_API_KEY":
             logger.warning(
                 "Embedding api_key chưa được set. Set GEMINI_API_KEY env var"
             )
-        
-        self._client = AsyncOpenAI(
-            api_key=config.embedding.api_key or "MISSING_API_KEY",
-            base_url=config.embedding.base_url,
-            timeout=config.embedding.request_timeout,
-        )
+
+        self._client = self._build_client(self._current_key)
         
         # Disk and memory cache
         self._cache: dict[str, list[float]] = {}
@@ -55,9 +58,23 @@ class EmbeddingClient:
             self._cache_enabled = False
         
         self._quota_exhausted = False
+
+    def _build_client(self, api_key: str) -> AsyncOpenAI:
+        return AsyncOpenAI(
+            api_key=api_key,
+            base_url=self._base_url,
+            timeout=self._request_timeout,
+        )
+
+    def _on_key_rotated(self, new_key: str):
+        self._current_key = new_key
+        self._client = self._build_client(new_key)
+        self._quota_exhausted = False  # reset flag với key mới
+
         logger.info(
             f"EmbeddingClient initialized: model={self.model}, "
-            f"dim={self.dimension}, cache={'on (disk)' if self._cache_enabled else 'off'}"
+            f"dim={self.dimension}, keys={self._key_rotator.key_count}, "
+            f"cache={'on (disk)' if self._cache_enabled else 'off'}"
         )
     
     def _load_cache(self):
@@ -110,25 +127,39 @@ class EmbeddingClient:
         
         from openai import RateLimitError
         import re
-        
+
         max_retries = 5
         retry_delay = 1.0
         vector = None
-        
+        key_rotated = False
+
         for attempt in range(max_retries):
             try:
                 response = await self._client.embeddings.create(
                     model=self.model,
                     input=text,
                 )
+                if key_rotated:
+                    self._key_rotator.mark_success()
                 vector = response.data[0].embedding
                 break
             except RateLimitError as e:
                 err_msg = str(e).lower()
                 if "quota" in err_msg or "exceeded your current quota" in err_msg:
-                    self._quota_exhausted = True
-                    logger.error(f"Daily embedding quota limit exceeded (RESOURCE_EXHAUSTED). Failing fast: {e}")
-                    raise
+                    if self._key_rotator.key_count > 1 and not key_rotated:
+                        new_key = await self._key_rotator.on_error(str(e))
+                        self._on_key_rotated(new_key)
+                        key_rotated = True
+                        logger.info(f"Embedding quota exhausted, rotated to key #{self._key_rotator.current_index}")
+                        continue
+                    elif key_rotated:
+                        self._quota_exhausted = True
+                        logger.error(f"All embedding keys exhausted. Giving up: {e}")
+                        raise
+                    else:
+                        self._quota_exhausted = True
+                        logger.error(f"Only 1 embedding key available. Quota exhausted: {e}")
+                        raise
                 if attempt == max_retries - 1:
                     logger.error(f"Rate limit hit on final embedding attempt: {e}")
                     raise
@@ -204,19 +235,33 @@ class EmbeddingClient:
                 retry_delay = 1.0
                 response = None
                 
+                batch_key_rotated = False
                 for attempt in range(max_retries):
                     try:
                         response = await self._client.embeddings.create(
                             model=self.model,
                             input=uncached_texts,
                         )
+                        if batch_key_rotated:
+                            self._key_rotator.mark_success()
                         break
                     except RateLimitError as e:
                         err_msg = str(e).lower()
                         if "quota" in err_msg or "exceeded your current quota" in err_msg:
-                            self._quota_exhausted = True
-                            logger.error(f"Daily embedding quota limit exceeded (RESOURCE_EXHAUSTED). Failing fast: {e}")
-                            raise
+                            if self._key_rotator.key_count > 1 and not batch_key_rotated:
+                                new_key = await self._key_rotator.on_error(str(e))
+                                self._on_key_rotated(new_key)
+                                batch_key_rotated = True
+                                logger.info(f"Embedding batch quota exhausted, rotated to key #{self._key_rotator.current_index}")
+                                continue
+                            elif batch_key_rotated:
+                                self._quota_exhausted = True
+                                logger.error(f"All embedding keys exhausted in batch. Giving up: {e}")
+                                raise
+                            else:
+                                self._quota_exhausted = True
+                                logger.error(f"Only 1 embedding key. Quota exhausted in batch: {e}")
+                                raise
                         if attempt == max_retries - 1:
                             logger.error(f"Rate limit hit on final embedding batch attempt: {e}")
                             raise
