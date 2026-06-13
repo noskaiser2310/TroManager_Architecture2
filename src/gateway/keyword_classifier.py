@@ -1,249 +1,113 @@
 """
-Keyword Classifier - Phân loại keyword trong câu hỏi.
-
-Hỗ trợ compound word detection để tránh false positive
-(ví dụ: "tiềm năng" không phải là keyword tài chính).
+LLM Intent Router - Quyết định trực tiếp target system dựa trên LLM.
+Thay thế KeywordClassifier cũ.
 """
 
 from __future__ import annotations
-import re
+import asyncio
+import json
+import logging
 from dataclasses import dataclass
 from typing import Literal
 
+logger = logging.getLogger(__name__)
 
 @dataclass
-class KeywordMatch:
-    """Kết quả phân loại keyword."""
-    category: Literal["sensitive", "complex", "safe", "neutral"]
-    confidence: float
-    matched_keywords: list[str]
+class RouteMatch:
+    """Kết quả phân loại route từ LLM."""
+    target_system: Literal["SYSTEM1", "SYSTEM2"]
     intent: str | None = None
+    matched_keywords: list[str] = None
+    confidence: float = 1.0
 
+class LLMIntentRouter:
+    """
+    Phân loại câu hỏi sử dụng model LLM siêu nhẹ (router_model).
+    """
+    
+    def __init__(self, llm_client=None, config: dict | None = None):
+        if llm_client is None:
+            from src.llm.llm_client import LLMClient
+            llm_client = LLMClient()
+        self.llm = llm_client.with_model(llm_client.config.router_model)
+        self.timeout = 5.0  # Mặc định 5s, có thể config qua tham số
+        if config:
+            self.timeout = float(config.get("llm_timeout_seconds", 5.0))
+        
+    async def classify(self, text: str) -> RouteMatch:
+        """
+        Quyết định route text sử dụng LLM.
+        Timeout protection: nếu LLM không trả lời trong timeout, fallback về SYSTEM2.
+        """
+        from src.llm.llm_client import LLMMessage
+        
+        prompt = f"""Bạn là Router hệ thống AI cho nhà trọ.
+Hãy đọc câu sau của người dùng: "{text}"
 
-class KeywordClassifier:
-    """
-    Phân loại câu hỏi dựa trên keyword matching với compound word awareness.
-    """
-    
-    # Compound words để tránh false positive
-    EXCLUDE_COMPOUNDS = {
-        "tiềm năng", "tiềm hiểu",
-        "phòng ngủ", "phòng khách", "phòng tắm",  # Không phải "phòng trọ"
-        "thanh niên", "thanh thản",  # Không phải "thanh toán"
-        "nỗ lực", "nỗi buồn",  # Không phải "nợ"
-        "hợp tác",  # Không phải "hợp đồng"
-    }
-    
-    # Intent mapping
-    INTENT_MAP = {
-        # Sensitive
-        "tiền": "billing_inquiry",
-        "nợ": "billing_inquiry",
-        "hóa đơn": "billing_inquiry",
-        "thanh toán": "billing_inquiry",
-        "hợp đồng": "contract_inquiry",
-        "gia hạn": "contract_inquiry",
-        "cọc": "billing_inquiry",
-        "hoàn cọc": "billing_inquiry",
-        "chuyển phòng": "room_transfer",
-        "đổi phòng": "room_transfer",
-        # Complex - room
-        "giá": "room_inquiry",
-        "phòng": "room_inquiry",
-        "diện tích": "room_inquiry",
-        "phòng trống": "room_recommendation",  # mủ hơn 'phòng' đơn lẻ
-        "còn trống": "room_recommendation",
-        "phòng nào trống": "room_recommendation",
-        "tìm phòng": "room_recommendation",
-        "đề xuất": "room_recommendation",
-        "gợi ý": "room_recommendation",
-        # Complex - maintenance
-        "hỏng": "maintenance_request",
-        "sửa": "maintenance_request",
-        "điều hòa": "maintenance_request",
-        "bảo trì": "maintenance_request",
-        # Policy
-        "nội quy": "policy_question",
-        "quy định": "policy_question",
-        "chính sách": "policy_question",
-    }
-    
-    def __init__(
-        self,
-        sensitive_keywords: list[str],
-        complex_keywords: list[str],
-        safe_keywords: list[str] = None,
-    ):
-        self.sensitive_keywords = sensitive_keywords
-        self.complex_keywords = complex_keywords
-        self.safe_keywords = safe_keywords or []
-        self._build_patterns()
-    
-    def _build_patterns(self):
-        """Build regex patterns với word boundary."""
-        self.sensitive_patterns = [
-            re.compile(rf"\b{re.escape(kw)}\b", re.IGNORECASE | re.UNICODE)
-            for kw in self.sensitive_keywords
-        ]
-        self.complex_patterns = [
-            re.compile(rf"\b{re.escape(kw)}\b", re.IGNORECASE | re.UNICODE)
-            for kw in self.complex_keywords
-        ]
-        self.safe_patterns = [
-            re.compile(rf"\b{re.escape(kw)}\b", re.IGNORECASE | re.UNICODE)
-            for kw in self.safe_keywords
-        ]
-    
-    def _has_excluded_compound(self, text: str) -> bool:
-        """Check nếu text chứa compound word excluded."""
-        text_lower = text.lower()
-        return any(compound in text_lower for compound in self.EXCLUDE_COMPOUNDS)
-    
-    def classify(self, text: str) -> KeywordMatch:
-        """
-        Phân loại text dựa trên keyword matching.
-        
-        Ưu tiên khuy phà multi-word patterns trước (vd: "phòng trống" thắng "phòng").
-        
-        Returns:
-            KeywordMatch với category, confidence, matched_keywords
-        """
-        text_lower = text.lower()
-        matched_sensitive = []
-        matched_complex = []
-        matched_safe = []
-        matched_intent = None
-        
-        # Check excluded compounds first
-        has_excluded = self._has_excluded_compound(text)
-        
-        # Match safe first (short-circuit for greetings/simple queries)
-        for kw, pattern in zip(self.safe_keywords, self.safe_patterns):
-            if pattern.search(text_lower):
-                matched_safe.append(kw)
-        
-        if matched_safe:
-            return KeywordMatch(
-                category="safe",
-                confidence=0.9,
-                matched_keywords=matched_safe,
+Quyết định hệ thống nào sẽ xử lý:
+- SYSTEM1: Câu hỏi đơn giản, giao tiếp bình thường (chào hỏi), tra cứu nội quy cơ bản, hoặc cần trả lời siêu nhanh.
+- SYSTEM2: Yêu cầu phức tạp, khiếu nại, báo hỏng hóc, tra cứu tài chính (nợ, hóa đơn, cọc), thao tác hợp đồng, đổi phòng, hoặc cần dùng tools (tra cứu DB, gọi API Zalo).
+
+Hãy xác định:
+1. target_system: Chỉ trả về "SYSTEM1" hoặc "SYSTEM2".
+2. intent: Ý định của người dùng (vd: "billing_inquiry", "room_inquiry", "maintenance_request", "general_chat", "policy_question").
+3. keywords: Các từ khóa chính trong câu.
+
+Trả về duy nhất JSON format:
+{{
+  "target_system": "SYSTEM1",
+  "intent": "general_chat",
+  "keywords": ["chào"]
+}}"""
+        try:
+            # Timeout protection: wrap LLM call với asyncio.wait_for
+            response = await asyncio.wait_for(
+                self.llm.generate(
+                    messages=[LLMMessage(role="user", content=prompt)],
+                    temperature=0.0,
+                    max_tokens=150,
+                    response_format={"type": "json_object"}
+                ),
+                timeout=self.timeout
+            )
+            
+            import re
+            
+            content = response.content.strip()
+            
+            # Extract JSON block robustly
+            json_match = re.search(r'\{.*?\}', content, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(0)
+            else:
+                json_str = content
+                
+            data = json.loads(json_str)
+            
+            target = data.get("target_system", "SYSTEM1")
+            if target not in ["SYSTEM1", "SYSTEM2"]:
+                target = "SYSTEM1"
+                
+            return RouteMatch(
+                target_system=target,
+                intent=data.get("intent", "general_chat"),
+                matched_keywords=data.get("keywords", []),
+                confidence=0.9
+            )
+        except asyncio.TimeoutError:
+            logger.warning(f"LLMIntentRouter timeout after {self.timeout}s — falling back to SYSTEM2")
+            return RouteMatch(
+                target_system="SYSTEM2",
                 intent="general_chat",
+                matched_keywords=["<timeout>"],
+                confidence=0.5
             )
-        
-        # --- Ưu tiên 0: check multi-word room patterns trước regex ---
-        # (regex \b không hoạt động tốt với tiếng Việt có dấu)
-        MULTI_WORD_ROOM = [
-            ("phòng trống", "room_recommendation"),
-            ("còn trống", "room_recommendation"),
-            ("phòng nào trống", "room_recommendation"),
-            ("tìm phòng", "room_recommendation"),
-            ("đổi phòng", "room_transfer"),
-            ("chuyển phòng", "room_transfer"),
-            ("đặt cọc", "policy_question"),  # System 1 cache handles this
-            ("hoàn cọc", "billing_inquiry"),
-            ("hóa đơn", "billing_inquiry"),
-            ("hợp đồng", "contract_inquiry"),
-            ("gia hạn", "contract_inquiry"),
-            ("thanh toán", "billing_inquiry"),
-            ("nội quy", "policy_question"),
-            ("quy định", "policy_question"),
-            ("chính sách", "policy_question"),
-            ("bảo trì", "maintenance_request"),
-            ("gợi ý", "room_recommendation"),
-            ("đề xuất", "room_recommendation"),
-        ]
-        for phrase, intent in MULTI_WORD_ROOM:
-            if phrase in text_lower:
-                # Multi-word match chiến thắng — return luôn
-                category = "sensitive" if intent in (
-                    "billing_inquiry", "contract_inquiry", "room_transfer"
-                ) else "complex"
-                return KeywordMatch(
-                    category=category,
-                    confidence=0.85,
-                    matched_keywords=[phrase],
-                    intent=intent,
-                )
-        
-        # Match sensitive
-        for kw, pattern in zip(self.sensitive_keywords, self.sensitive_patterns):
-            if pattern.search(text_lower):
-                matched_sensitive.append(kw)
-        
-        # Match complex
-        for kw, pattern in zip(self.complex_keywords, self.complex_patterns):
-            if pattern.search(text_lower):
-                matched_complex.append(kw)
-        
-        # Decision logic
-        if matched_sensitive:
-            # Sensitive wins - tính confidence dựa trên số lượng
-            confidence = min(0.7 + 0.1 * len(matched_sensitive), 0.95)
-            return KeywordMatch(
-                category="sensitive",
-                confidence=confidence,
-                matched_keywords=matched_sensitive,
-                intent=self._infer_intent(matched_sensitive + matched_complex),
+        except Exception as e:
+            logger.error(f"LLMIntentRouter error: {e}")
+            # Fallback an toàn về System 2 nếu lỗi LLM
+            return RouteMatch(
+                target_system="SYSTEM2",
+                intent="general_chat",
+                matched_keywords=["<error>"],
+                confidence=0.5
             )
-        
-        if matched_complex:
-            confidence = min(0.5 + 0.1 * len(matched_complex), 0.8)
-            return KeywordMatch(
-                category="complex",
-                confidence=confidence,
-                matched_keywords=matched_complex,
-                intent=self._infer_intent(matched_complex),
-            )
-        
-        # Boost confidence nếu có số tiền
-        money_pattern = re.compile(r"\d+\s*(triệu|tr|nghìn|k|đồng|vnd|đ)", re.IGNORECASE)
-        if money_pattern.search(text):
-            return KeywordMatch(
-                category="sensitive",
-                confidence=0.85,
-                matched_keywords=["<money_amount>"],
-                intent="billing_inquiry",
-            )
-        
-        # Default: safe/neutral
-        return KeywordMatch(
-            category="safe",
-            confidence=0.3,
-            matched_keywords=[],
-            intent="general_chat",
-        )
-    
-    def _infer_intent(self, keywords: list[str]) -> str | None:
-        """Infer intent từ matched keywords."""
-        for kw in keywords:
-            if kw in self.INTENT_MAP:
-                return self.INTENT_MAP[kw]
-        return None
-
-
-# ============ Unit test (chạy trực tiếp) ============
-
-if __name__ == "__main__":
-    classifier = KeywordClassifier(
-        sensitive_keywords=["tiền", "nợ", "hợp đồng", "hóa đơn", "cọc", "chuyển phòng"],
-        complex_keywords=["hỏng", "sửa", "điều hòa", "tìm phòng"],
-    )
-    
-    test_cases = [
-        "Tôi còn nợ bao nhiêu?",
-        "Wifi mật khẩu gì?",
-        "Điều hòa phòng tôi bị hỏng",
-        "Tiềm năng phát triển của thị trường",
-        "Tôi cần chuyển phòng",
-        "Anh ơi hợp đồng tôi còn bao lâu",
-        "Thanh toán 3.5 triệu nhé",
-        "Phòng ngủ tôi rộng bao nhiêu",  # False positive test - không phải phòng trọ
-    ]
-    
-    for text in test_cases:
-        match = classifier.classify(text)
-        print(f"\nText: {text}")
-        print(f"  → Category: {match.category}")
-        print(f"  → Confidence: {match.confidence:.2f}")
-        print(f"  → Matched: {match.matched_keywords}")
-        print(f"  → Intent: {match.intent}")

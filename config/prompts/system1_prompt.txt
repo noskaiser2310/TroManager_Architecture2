@@ -46,6 +46,9 @@ Trung thực, minh bạch. Thông tin chính xác là ưu tiên tuyệt đối.
 [Lịch sử hội thoại]
 {history_context}
 
+[Thông tin người dùng]
+{profile_data}
+
 [Context — Knowledge Base]
 {contexts}
 

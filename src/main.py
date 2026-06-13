@@ -243,7 +243,7 @@ async def lifespan(app: FastAPI):
     from .user_modeling.persona_optimizer import PersonaOptimizer
     container.persona_optimizer = PersonaOptimizer(
         db_pool=container.db_pool,
-        api_key=os.environ.get("GEMINI_API_KEY", "")
+        llm_client=flash_client
     )
     logger.info("User modeling services initialized (incl. ConversationMemory, PersonaOptimizer, ApprovalService)")
     
@@ -345,6 +345,7 @@ async def lifespan(app: FastAPI):
         memory_manager=container.memory_manager,
         llm_client=get_llm_client("pro"),
         conversation_memory=container.conversation_memory,
+        persona_optimizer=container.persona_optimizer,
     )
     container.react_agent.cron_scheduler = container.cron_scheduler
     
@@ -709,9 +710,10 @@ async def _process_chat(request: ChatRequest, session_id: str) -> ChatResponse:
     )
 
     # Route
-    decision = container.router.route(incoming)
+    decision = await container.router.route(incoming)
 
     # Process
+    tokens_used = 0
     if decision.target_system.value == "system1":
         sys1_request = System1Request(
             query=request.message,
@@ -733,11 +735,13 @@ async def _process_chat(request: ChatRequest, session_id: str) -> ChatResponse:
             system_used = "system2"
             tools_used = [tc["name"] for tc in sys2_response.tool_calls]
             actions_taken = sys2_response.actions_taken
+            tokens_used = getattr(sys2_response, "tokens_used", 0) + getattr(response, "tokens_used", 0)
         else:
             response_answer = response.answer
             system_used = "system1"
             tools_used = []
             actions_taken = []
+            tokens_used = getattr(response, "tokens_used", 0)
 
         confidence = response.confidence
     else:
@@ -752,9 +756,18 @@ async def _process_chat(request: ChatRequest, session_id: str) -> ChatResponse:
         system_used = "system2"
         tools_used = [tc["name"] for tc in sys2_response.tool_calls]
         actions_taken = sys2_response.actions_taken
+        tokens_used = getattr(sys2_response, "tokens_used", 0)
         confidence = 1.0
 
     latency = int((asyncio.get_event_loop().time() - start) * 1000)
+
+    # Cost estimation (simplified)
+    # Flash: ~$0.075 / 1M tokens, Pro: ~$1.25 / 1M tokens
+    cost_usd = 0.0
+    if system_used == "system1":
+        cost_usd = (tokens_used / 1_000_000) * 0.075
+    else:
+        cost_usd = (tokens_used / 1_000_000) * 1.25
 
     # Save turn to conversation history
     if container.conversation_memory and request.tenant_id:
@@ -769,6 +782,8 @@ async def _process_chat(request: ChatRequest, session_id: str) -> ChatResponse:
                 iterations=len(actions_taken),
                 tool_calls=[{"name": t} for t in tools_used],
                 latency_ms=latency,
+                tokens_used=tokens_used,
+                cost_usd=cost_usd,
             )
         except Exception as e:
             logger.warning(f"Failed to save conversation turn: {e}")

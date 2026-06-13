@@ -276,6 +276,10 @@ class ApprovalService:
         """
         if request.tool_name == "send_payment_reminder":
             return await self._execute_send_payment_reminder(request)
+        elif request.tool_name == "send_zalo":
+            return await self._execute_send_zalo(request)
+        elif request.tool_name == "send_sms":
+            return await self._execute_send_sms(request)
         else:
             # Unknown tool - just log
             logger.warning(
@@ -283,6 +287,86 @@ class ApprovalService:
                 f"(approval {request.approval_id})"
             )
             return f"No executor for tool '{request.tool_name}'"
+
+    async def _execute_send_zalo(self, request: ApprovalRequest) -> str:
+        args = request.tool_args
+        tenant_id = args.get("tenant_id") or request.tenant_id
+        message = args.get("message")
+        
+        if not message:
+            return "Missing message in tool_args"
+            
+        async with self.db.acquire() as conn:
+            row = await conn.fetchrow("""
+                SELECT full_name, zalo_id FROM user_profiles WHERE tenant_id = $1
+            """, tenant_id)
+            
+        if not row:
+            return f"Tenant {tenant_id} not found"
+            
+        zalo_id = row["zalo_id"]
+        if not zalo_id:
+            return f"Tenant {row['full_name']} chưa liên kết Zalo."
+            
+        if not self.zalo:
+            logger.warning("ApprovalService: no zalo_client configured, skipping send")
+            return "Approved but no zalo_client configured (message not sent)"
+
+        from ..notifications.zalo_client import ZaloMessage
+        result = await self.zalo.send_message(ZaloMessage(
+            recipient_id=zalo_id,
+            message=message,
+        ))
+
+        if self.behaviors:
+            await self.behaviors.log(
+                tenant_id=tenant_id,
+                action_type="zalo_message_sent",
+                description=f"Sent Zalo message (approved #{request.approval_id})",
+                metadata={"approval_id": request.approval_id, "zalo_success": result.success}
+            )
+
+        if result.success:
+            return f"Đã gửi Zalo thành công tới {row['full_name']}"
+        else:
+            return f"Gửi Zalo thất bại: {result.error}"
+
+    async def _execute_send_sms(self, request: ApprovalRequest) -> str:
+        args = request.tool_args
+        tenant_id = args.get("tenant_id") or request.tenant_id
+        message = args.get("message")
+        
+        if not message:
+            return "Missing message in tool_args"
+            
+        async with self.db.acquire() as conn:
+            row = await conn.fetchrow("""
+                SELECT full_name, phone_number FROM user_profiles WHERE tenant_id = $1
+            """, tenant_id)
+            
+        if not row:
+            return f"Tenant {tenant_id} not found"
+            
+        phone_number = row["phone_number"]
+        if not phone_number:
+            return f"Tenant {row['full_name']} chưa có số điện thoại."
+            
+        from ..core import get_sms_client
+        sms = get_sms_client()
+        result = await sms.send_sms(phone_number, message)
+
+        if self.behaviors:
+            await self.behaviors.log(
+                tenant_id=tenant_id,
+                action_type="sms_message_sent",
+                description=f"Sent SMS message (approved #{request.approval_id})",
+                metadata={"approval_id": request.approval_id, "sms_success": result.success}
+            )
+
+        if result.success:
+            return f"Đã gửi SMS thành công tới {row['full_name']}"
+        else:
+            return f"Gửi SMS thất bại: {result.error}"
 
     async def _execute_send_payment_reminder(
         self, request: ApprovalRequest
@@ -344,7 +428,7 @@ class ApprovalService:
             logger.warning("ApprovalService: no zalo_client configured, skipping send")
             return "Approved but no zalo_client configured (message not sent)"
 
-        from src.notifications.zalo_client import ZaloMessage
+        from ..notifications.zalo_client import ZaloMessage
         result = await self.zalo.send_message(ZaloMessage(
             recipient_id=zalo_id,
             message=msg,

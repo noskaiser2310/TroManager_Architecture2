@@ -84,12 +84,21 @@ class EventDispatcher:
         if not can_send:
             logger.info(f"Anti-spam: skip event for tenant {event.tenant_id}")
             return "SKIPPED: anti-spam protection"
+
+        profile = None
+        if self.profile_service:
+            profile = await self.profile_service.get_profile(event.tenant_id)
+
+        # 1.2 Opt-out check
+        if profile and profile.notification_opt_out:
+            if event.event_type in profile.notification_opt_out or "all" in profile.notification_opt_out:
+                logger.info(f"Opt-out: skip event {event.event_type} for tenant {event.tenant_id}")
+                return "SKIPPED: notification_opt_out"
             
         # 1.5 Golden Time Delivery Check
         is_delayed_execution = event.data.get("delayed_from_golden_time", False)
         
-        if not is_delayed_execution and self.profile_service and self.cron_scheduler:
-            profile = await self.profile_service.get_profile(event.tenant_id)
+        if not is_delayed_execution and profile and self.cron_scheduler:
             if profile and profile.personalization_profile:
                 active_hours = profile.personalization_profile.get("preferences", {}).get("active_hours", "")
                 slots = self._get_active_slots(active_hours)

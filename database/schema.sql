@@ -98,7 +98,7 @@ CREATE TRIGGER update_rooms_updated_at
 
 CREATE TABLE contracts (
     contract_id SERIAL PRIMARY KEY,
-    tenant_id INT NOT NULL REFERENCES user_profiles(tenant_id) ON DELETE CASCADE,
+    tenant_id INT REFERENCES user_profiles(tenant_id) ON DELETE SET NULL,
     room_id INT NOT NULL REFERENCES rooms(room_id) ON DELETE RESTRICT,
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
@@ -126,7 +126,7 @@ CREATE TRIGGER update_contracts_updated_at
 
 CREATE TABLE invoices (
     invoice_id SERIAL PRIMARY KEY,
-    tenant_id INT NOT NULL REFERENCES user_profiles(tenant_id) ON DELETE CASCADE,
+    tenant_id INT REFERENCES user_profiles(tenant_id) ON DELETE SET NULL,
     room_id INT NOT NULL REFERENCES rooms(room_id) ON DELETE RESTRICT,
     contract_id INT REFERENCES contracts(contract_id) ON DELETE SET NULL,
     invoice_month DATE NOT NULL,  -- First day of month
@@ -157,46 +157,26 @@ CREATE TRIGGER update_invoices_updated_at
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- =====================================================================
--- 7. Bảng PAYMENTS (Thanh toán)
--- =====================================================================
-
-CREATE TABLE payments (
-    payment_id SERIAL PRIMARY KEY,
-    invoice_id INT NOT NULL REFERENCES invoices(invoice_id) ON DELETE CASCADE,
-    tenant_id INT NOT NULL REFERENCES user_profiles(tenant_id) ON DELETE CASCADE,
-    amount DECIMAL(12,2) NOT NULL,
-    payment_method VARCHAR(50),  -- bank_transfer, cash, momo, ...
-    transaction_ref VARCHAR(100),
-    payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    confirmed_by INT,  -- user_id of staff who confirmed
-    notes TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_payment_invoice ON payments(invoice_id);
-CREATE INDEX idx_payment_tenant ON payments(tenant_id);
-CREATE INDEX idx_payment_date ON payments(payment_date);
-
--- =====================================================================
 -- 8. Bảng BEHAVIOR_LOGS (Hồ sơ ngầm & Hành vi)
 -- =====================================================================
 
 CREATE TABLE behavior_logs (
     log_id SERIAL PRIMARY KEY,
-    tenant_id INT REFERENCES user_profiles(tenant_id) ON DELETE CASCADE,
+    tenant_id INT REFERENCES user_profiles(tenant_id) ON DELETE SET NULL,
     action_type VARCHAR(100) NOT NULL,
     description TEXT,
     metadata JSONB DEFAULT '{}',
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+) PARTITION BY RANGE (timestamp);
 
 CREATE INDEX idx_behavior_tenant_time ON behavior_logs(tenant_id, timestamp DESC);
 CREATE INDEX idx_behavior_type ON behavior_logs(tenant_id, action_type);
 CREATE INDEX idx_behavior_timestamp ON behavior_logs(timestamp);
+CREATE INDEX idx_behavior_tenant_type_time ON behavior_logs(tenant_id, action_type, timestamp DESC);
 
--- Partition by month for performance (optional, uncomment if data grows)
--- CREATE TABLE behavior_logs_y2026m06 PARTITION OF behavior_logs
---     FOR VALUES FROM ('2026-06-01') TO ('2026-07-01');
+-- Partition by month for performance
+CREATE TABLE behavior_logs_y2026m06 PARTITION OF behavior_logs
+    FOR VALUES FROM ('2026-06-01') TO ('2026-07-01');
 
 -- =====================================================================
 -- 9. Bảng USER_EMBEDDINGS (Semantic Memory)
@@ -216,7 +196,7 @@ CREATE TABLE user_embeddings (
 );
 
 CREATE INDEX idx_user_emb_tenant ON user_embeddings(tenant_id);
--- Removed ivfflat index for 3072 dims
+CREATE INDEX idx_user_emb_vector ON user_embeddings USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX idx_user_emb_archived ON user_embeddings(is_archived);
 
 -- =====================================================================
@@ -234,7 +214,7 @@ CREATE TABLE semantic_cache (
     expires_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP + INTERVAL '30 days')
 );
 
--- Removed ivfflat index for 3072 dims
+CREATE INDEX idx_cache_query_vector ON semantic_cache USING hnsw (query_embedding vector_cosine_ops);
 CREATE INDEX idx_cache_last_accessed ON semantic_cache(last_accessed);
 CREATE INDEX idx_cache_expires ON semantic_cache(expires_at);
 
@@ -245,7 +225,7 @@ CREATE INDEX idx_cache_expires ON semantic_cache(expires_at);
 CREATE TABLE maintenance_tickets (
     ticket_id SERIAL PRIMARY KEY,
     ticket_code VARCHAR(20) UNIQUE NOT NULL,  -- TKT-2026-0001
-    tenant_id INT NOT NULL REFERENCES user_profiles(tenant_id) ON DELETE CASCADE,
+    tenant_id INT REFERENCES user_profiles(tenant_id) ON DELETE SET NULL,
     room_id INT REFERENCES rooms(room_id) ON DELETE SET NULL,
     issue_category VARCHAR(50),  -- electrical, plumbing, appliance, ...
     title VARCHAR(255) NOT NULL,
@@ -277,7 +257,7 @@ CREATE TRIGGER update_tickets_updated_at
 
 CREATE TABLE conversation_history (
     conversation_id SERIAL PRIMARY KEY,
-    tenant_id INT REFERENCES user_profiles(tenant_id) ON DELETE CASCADE,
+    tenant_id INT REFERENCES user_profiles(tenant_id) ON DELETE SET NULL,
     session_id UUID,
     source VARCHAR(50),  -- zalo, sms, cron
     user_message TEXT,
@@ -303,7 +283,7 @@ CREATE TABLE approval_queue (
     approval_id SERIAL PRIMARY KEY,
     tool_name VARCHAR(100) NOT NULL,
     tool_args JSONB NOT NULL,
-    tenant_id INT REFERENCES user_profiles(tenant_id) ON DELETE CASCADE,
+    tenant_id INT REFERENCES user_profiles(tenant_id) ON DELETE SET NULL,
     requested_by VARCHAR(50),  -- system, user_id
     approver_role VARCHAR(50),
     status VARCHAR(20) DEFAULT 'pending',  -- pending, approved, rejected
@@ -322,7 +302,7 @@ CREATE INDEX idx_approval_tenant ON approval_queue(tenant_id);
 
 CREATE TABLE appointments (
     appointment_id SERIAL PRIMARY KEY,
-    tenant_id INT REFERENCES user_profiles(tenant_id) ON DELETE CASCADE,
+    tenant_id INT REFERENCES user_profiles(tenant_id) ON DELETE SET NULL,
     room_id INT REFERENCES rooms(room_id) ON DELETE SET NULL,
     scheduled_at TIMESTAMP NOT NULL,
     status VARCHAR(20) DEFAULT 'pending',  -- pending, confirmed, cancelled, completed
@@ -538,17 +518,6 @@ BEGIN
     ORDER BY ue.embedding <=> query_embedding
     LIMIT max_results;
     
-    -- Update last_retrieved
-    UPDATE user_embeddings
-    SET last_retrieved = CURRENT_TIMESTAMP,
-        retrieval_count = retrieval_count + 1
-    WHERE user_embeddings.memory_id IN (
-        SELECT ue2.memory_id FROM user_embeddings ue2
-        WHERE ue2.tenant_id = p_tenant_id
-          AND ue2.is_archived = FALSE
-        ORDER BY ue2.embedding <=> query_embedding
-        LIMIT max_results
-    );
 END;
 $$ LANGUAGE plpgsql;
 

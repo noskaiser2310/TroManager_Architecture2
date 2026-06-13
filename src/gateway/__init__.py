@@ -7,7 +7,7 @@ from .router import (
     Priority,
     create_default_router,
 )
-from .keyword_classifier import KeywordClassifier, KeywordMatch
+from .keyword_classifier import LLMIntentRouter, RouteMatch
 
 __all__ = [
     "RouterGateway",
@@ -16,6 +16,6 @@ __all__ = [
     "TargetSystem",
     "Priority",
     "create_default_router",
-    "KeywordClassifier",
-    "KeywordMatch",
+    "LLMIntentRouter",
+    "RouteMatch",
 ]

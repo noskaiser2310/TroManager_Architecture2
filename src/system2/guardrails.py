@@ -27,6 +27,16 @@ class Guardrails:
             "approver_role": "landlord",
             "reason": "Ảnh hưởng quan hệ khách thuê"
         },
+        "send_zalo": {
+            "requires_approval": True,
+            "approver_role": "landlord",
+            "reason": "Tránh gửi sai nội dung tin nhắn ra ngoài"
+        },
+        "send_sms": {
+            "requires_approval": True,
+            "approver_role": "landlord",
+            "reason": "Tốn phí SMS và tránh spam"
+        },
     }
 
     # Default fallback (override qua config["system2"]["guardrails"]["fallback"])
@@ -135,19 +145,28 @@ class Guardrails:
         
         logger.warning(f"Token limit exceeded ({total_tokens} > {max_t}), compressing history")
         
-        if len(messages) <= 4:
-            return messages  # Không thể compress thêm
+        # Keep system message if it exists
+        has_system = messages and getattr(messages[0], "type", "") == "system"
+        system_msg = messages[0] if has_system else None
         
-        # Giữ system message đầu tiên + 3 turns gần nhất
-        system_msg = messages[0]
-        recent = messages[-3:]
+        recent = []
         
-        # Summarize phần giữa
-        middle = messages[1:-3]
-        summary = f"[Đã nén: {len(middle)} tin nhắn trước đó]"
-        summary_msg = SystemMessage(content=summary)
-        
-        return [system_msg, summary_msg] + recent
+        # Collect backward, max 10 messages, and ensure we don't start with a ToolMessage
+        msgs_to_process = messages[1:] if has_system else messages
+        for m in reversed(msgs_to_process):
+            recent.insert(0, m)
+            if len(recent) >= 8:
+                break
+                
+        # If the first item in recent is a ToolMessage, we MUST include the AIMessage before it
+        # Langchain crashes if ToolMessage exists without corresponding AIMessage
+        while recent and getattr(recent[0], "type", "") == "tool":
+            # Find the AIMessage that generated this tool call in the original list
+            # Usually it's just the one right before the ToolMessages sequence
+            # Since this is complex, an easier way is to just drop the ToolMessage
+            recent.pop(0)
+            
+        return [system_msg] + recent if system_msg else recent
     
     def get_fallback_message(self) -> str:
         """
@@ -169,4 +188,4 @@ class Guardrails:
         content = ""
         if hasattr(message, "content"):
             content = str(message.content)
-        return len(content) // 3
+        return len(content) // 4

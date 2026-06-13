@@ -3,10 +3,15 @@
 # File này KHÔNG được commit lên git
 
 llm:
+  # - flash_model: dùng cho System 1 (nhanh, rẻ)
+  # - pro_model:   dùng cho System 2 (mạnh, đắt)
+  # - router_model: dùng cho Intent Router (siêu nhẹ)
+  # ---------------------------------------------------------------
   base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
   api_key: "YOUR_GEMINI_API_KEY_HERE"
-  flash_model: "gemini-3.0-flash"
+  flash_model: "gemma-4-31b-it"
   pro_model: "gemini-3.0-pro"
+  router_model: "gemma-4-26b-a4b-it"
 
 embedding:
   base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"

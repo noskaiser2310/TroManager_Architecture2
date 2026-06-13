@@ -37,9 +37,11 @@ llm:
   # Model names
   # - flash_model: dùng cho System 1 (nhanh, rẻ)
   # - pro_model: dùng cho System 2 (mạnh, đắt)
+  # - router_model: dùng cho Intent Router (siêu nhẹ)
   # ---------------------------------------------------------------
-  flash_model: "gemma-4-26b-a4b-it"        # bản flash (System 1)
+  flash_model: "gemma-4-31b-it"            # bản flash (System 1)
   pro_model: "gemini-3.1-flash-lite"       # bản pro (System 2)
+  router_model: "gemma-4-26b-a4b-it"       # bản router (Intent Router)
   
   # ---------------------------------------------------------------
   # Request defaults

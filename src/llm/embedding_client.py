@@ -89,11 +89,21 @@ class EmbeddingClient:
 
     def _save_cache(self):
         import json
+        import os
+        import tempfile
         try:
             self._cache_file.parent.mkdir(parents=True, exist_ok=True)
-            self._cache_file.write_text(json.dumps(self._cache, ensure_ascii=False), encoding="utf-8")
+            fd, tmp_path = tempfile.mkstemp(dir=self._cache_file.parent, prefix="emb_cache_", suffix=".tmp")
+            with os.fdopen(fd, 'w', encoding="utf-8") as f:
+                json.dump(self._cache, f, ensure_ascii=False)
+            os.replace(tmp_path, self._cache_file)
         except Exception as e:
             logger.warning(f"Failed to save embedding cache to disk: {e}")
+            try:
+                if 'tmp_path' in locals() and os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+            except Exception:
+                pass
 
     async def encode(self, text: str) -> list[float]:
         """
@@ -138,6 +148,7 @@ class EmbeddingClient:
                 response = await self._client.embeddings.create(
                     model=self.model,
                     input=text,
+                    timeout=10.0,
                 )
                 if key_rotated:
                     self._key_rotator.mark_success()
@@ -241,6 +252,7 @@ class EmbeddingClient:
                         response = await self._client.embeddings.create(
                             model=self.model,
                             input=uncached_texts,
+                            timeout=10.0,
                         )
                         if batch_key_rotated:
                             self._key_rotator.mark_success()

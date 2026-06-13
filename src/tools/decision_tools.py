@@ -113,6 +113,18 @@ async def calc_rent(
     try:
         pool = get_db_pool()
         async with pool.acquire() as conn:
+            # Check permission: tenant can only calculate rent for their own room
+            from ..core import current_tenant_id
+            ctx_tenant_id = current_tenant_id.get()
+            
+            if ctx_tenant_id is not None:
+                has_access = await conn.fetchval(
+                    "SELECT 1 FROM user_profiles WHERE tenant_id = $1 AND room_id = $2",
+                    ctx_tenant_id, room_id
+                )
+                if not has_access:
+                    return f"Bạn không có quyền xem thông tin hóa đơn của phòng này."
+
             # Lấy thông tin phòng
             room = await conn.fetchrow(
                 """SELECT room_id, room_number, monthly_rent, 
@@ -137,6 +149,8 @@ async def calc_rent(
                         electricity_kwh = float(invoice['electricity_kwh'] or 0)
                     if water_m3 == 0:
                         water_m3 = float(invoice['water_m3'] or 0)
+                else:
+                    return f"Không có dữ liệu hóa đơn cho phòng {room['room_number']} tháng {month}. Vui lòng cung cấp số điện nước để tính."
             
             # Tính tiền
             base_rent = float(room['monthly_rent'])
@@ -310,7 +324,7 @@ async def compare_rooms(room_id_1: int, room_id_2: int) -> str:
             lines = ["So sánh 2 phòng:"]
             lines.append("")
             for k in d1.keys():
-                lines.append(f"**{k}**: Phòng {d1[k.split(':')[0]] if False else ''}{d1[k]} | Phòng {d2[k]}")
+                lines.append(f"**{k}**: Phòng {r1['room_number']} = {d1[k]} | Phòng {r2['room_number']} = {d2[k]}")
             
             # Recommendation
             cheaper = r1 if r1['monthly_rent'] < r2['monthly_rent'] else r2
@@ -341,7 +355,6 @@ async def recommend_renewal(tenant_id: int) -> str:
     """
     import json
     from datetime import date
-    from dateutil.relativedelta import relativedelta
     from ..core import get_db_pool
 
     try:
@@ -385,8 +398,11 @@ async def recommend_renewal(tenant_id: int) -> str:
             customer_value = "LOW"
             cv_score = 0.0
             if lease_start:
-                delta = relativedelta(date.today(), lease_start)
-                months_stayed = delta.years * 12 + delta.months
+                today = date.today()
+                months_stayed = (today.year - lease_start.year) * 12 + (today.month - lease_start.month)
+                if today.day < lease_start.day:
+                    months_stayed -= 1
+                months_stayed = max(0, months_stayed)
                 
                 if months_stayed > 24:
                     customer_value = "VIP"
@@ -416,16 +432,23 @@ async def recommend_renewal(tenant_id: int) -> str:
                 churn_risk_inverse = 0.5
 
             # 5. Preference (Persona)
-            prefs = profile_json.get("preferences", {})
+            prefs = profile_json.get("preferences", {}) if isinstance(profile_json, dict) else {}
             primary_concerns = prefs.get("primary_concerns", [])
             
             persona = []
             persona_match_score = 0.5 # Default
-            if "Giá cả" in primary_concerns:
+            
+            # primary_concerns can be string or list
+            if isinstance(primary_concerns, str):
+                concerns_text = primary_concerns.lower()
+            else:
+                concerns_text = " ".join([str(c) for c in primary_concerns]).lower()
+                
+            if "giá" in concerns_text or "tài chính" in concerns_text:
                 persona.append("PRICE_SENSITIVE")
-            if "An ninh" in primary_concerns:
+            if "an ninh" in concerns_text or "an toàn" in concerns_text:
                 persona.append("SECURITY")
-            if "Yên tĩnh" in primary_concerns:
+            if "yên tĩnh" in concerns_text or "ồn ào" in concerns_text:
                 persona.append("QUIET")
                 
             if persona:

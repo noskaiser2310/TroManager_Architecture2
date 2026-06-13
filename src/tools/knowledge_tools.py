@@ -16,12 +16,12 @@ logger = logging.getLogger(__name__)
 # ============ Tool 1: get_invoice_detail ============
 
 class GetInvoiceDetailInput(BaseModel):
-    tenant_id: int = Field(..., description="ID khách thuê")
+    tenant_id: Optional[int] = Field(None, description="ID khách thuê (không bắt buộc, hệ thống tự nhận diện)")
     month: str = Field(..., description="Tháng cần tra cứu, format YYYY-MM")
 
 
 @tool(args_schema=GetInvoiceDetailInput)
-async def get_invoice_detail(tenant_id: int, month: str) -> str:
+async def get_invoice_detail(month: str, tenant_id: Optional[int] = None) -> str:
     """
     Lấy chi tiết hóa đơn của tenant theo tháng.
     """
@@ -29,7 +29,7 @@ async def get_invoice_detail(tenant_id: int, month: str) -> str:
     from datetime import datetime
     
     ctx_tenant_id = current_tenant_id.get()
-    if ctx_tenant_id is not None:
+    if tenant_id is None and ctx_tenant_id is not None:
         tenant_id = ctx_tenant_id
     
     # Normalize month format to YYYY-MM
@@ -74,7 +74,8 @@ async def get_invoice_detail(tenant_id: int, month: str) -> str:
                 FROM invoices i
                 JOIN rooms r ON i.room_id = r.room_id
                 WHERE i.tenant_id = $1 
-                  AND TO_CHAR(i.invoice_month, 'YYYY-MM') = $2
+                  AND i.invoice_month >= ($2 || '-01')::DATE
+                  AND i.invoice_month < ($2 || '-01')::DATE + INTERVAL '1 month'
             """, tenant_id, month)
             
             if not invoice:
@@ -108,18 +109,18 @@ async def get_invoice_detail(tenant_id: int, month: str) -> str:
 # ============ Tool 2: get_contract_status ============
 
 class GetContractStatusInput(BaseModel):
-    tenant_id: int = Field(..., description="ID khách thuê")
+    tenant_id: Optional[int] = Field(None, description="ID khách thuê (không bắt buộc, hệ thống tự nhận diện)")
 
 
 @tool(args_schema=GetContractStatusInput)
-async def get_contract_status(tenant_id: int) -> str:
+async def get_contract_status(tenant_id: Optional[int] = None) -> str:
     """
     Lấy trạng thái hợp đồng hiện tại của tenant.
     """
     from ..core import get_db_pool, current_tenant_id
     
     ctx_tenant_id = current_tenant_id.get()
-    if ctx_tenant_id is not None:
+    if tenant_id is None and ctx_tenant_id is not None:
         tenant_id = ctx_tenant_id
     
     try:
@@ -177,19 +178,19 @@ async def get_contract_status(tenant_id: int) -> str:
 # ============ Tool 3: get_payment_history ============
 
 class GetPaymentHistoryInput(BaseModel):
-    tenant_id: int = Field(..., description="ID khách thuê")
+    tenant_id: Optional[int] = Field(None, description="ID khách thuê (không bắt buộc, hệ thống tự nhận diện)")
     months: int = Field(6, description="Số tháng gần nhất (mặc định 6)")
 
 
 @tool(args_schema=GetPaymentHistoryInput)
-async def get_payment_history(tenant_id: int, months: int = 6) -> str:
+async def get_payment_history(tenant_id: Optional[int] = None, months: int = 6) -> str:
     """
     Lấy lịch sử thanh toán của tenant trong N tháng gần nhất.
     """
     from ..core import get_db_pool, current_tenant_id
     
     ctx_tenant_id = current_tenant_id.get()
-    if ctx_tenant_id is not None:
+    if tenant_id is None and ctx_tenant_id is not None:
         tenant_id = ctx_tenant_id
     
     try:
@@ -200,9 +201,9 @@ async def get_payment_history(tenant_id: int, months: int = 6) -> str:
                        due_date, paid_date, status
                 FROM invoices
                 WHERE tenant_id = $1
-                  AND invoice_month >= CURRENT_DATE - ($2 || ' months')::INTERVAL
+                  AND invoice_month >= CURRENT_DATE - make_interval(months => $2)
                 ORDER BY invoice_month DESC
-            """, tenant_id, str(months))
+            """, tenant_id, months)
             
             if not invoices:
                 return f"Không có lịch sử thanh toán trong {months} tháng gần nhất."
@@ -230,21 +231,92 @@ async def get_payment_history(tenant_id: int, months: int = 6) -> str:
         return f"Lỗi khi tra cứu lịch sử: {str(e)}"
 
 
+# ============ Tool 3.5: get_maintenance_status ============
+
+class GetMaintenanceStatusInput(BaseModel):
+    ticket_code: Optional[str] = Field(None, description="Mã ticket (ví dụ: TKT-123456). Nếu không có, sẽ lấy các ticket gần nhất của tenant.")
+    tenant_id: Optional[int] = Field(None, description="ID khách thuê (không bắt buộc, hệ thống tự nhận diện)")
+
+
+@tool(args_schema=GetMaintenanceStatusInput)
+async def get_maintenance_status(ticket_code: Optional[str] = None, tenant_id: Optional[int] = None) -> str:
+    """
+    Tra cứu trạng thái các yêu cầu bảo trì (maintenance tickets) của khách thuê.
+    """
+    from ..core import get_db_pool, current_tenant_id
+    
+    ctx_tenant_id = current_tenant_id.get()
+    if tenant_id is None and ctx_tenant_id is not None:
+        tenant_id = ctx_tenant_id
+    
+    try:
+        pool = get_db_pool()
+        async with pool.acquire() as conn:
+            if ticket_code:
+                # Tìm theo mã ticket
+                ticket = await conn.fetchrow("""
+                    SELECT ticket_code, issue_description, priority, status, created_at, resolved_at
+                    FROM maintenance_tickets
+                    WHERE ticket_code = $1
+                """, ticket_code)
+                
+                if not ticket:
+                    return f"Không tìm thấy yêu cầu bảo trì nào với mã {ticket_code}."
+                
+                tickets = [ticket]
+            else:
+                # Lấy 5 ticket gần nhất của tenant
+                if not tenant_id:
+                    return "Cần cung cấp tenant_id hoặc ticket_code để tra cứu."
+                    
+                tickets = await conn.fetch("""
+                    SELECT ticket_code, issue_description, priority, status, created_at, resolved_at
+                    FROM maintenance_tickets
+                    WHERE tenant_id = $1
+                    ORDER BY created_at DESC
+                    LIMIT 5
+                """, tenant_id)
+                
+                if not tickets:
+                    return "Quý khách chưa có yêu cầu bảo trì nào gần đây."
+            
+            lines = ["Trạng thái yêu cầu bảo trì:"]
+            for t in tickets:
+                status_vi = {
+                    'open': 'Mới ghi nhận',
+                    'in_progress': 'Đang xử lý',
+                    'resolved': 'Đã hoàn thành',
+                    'closed': 'Đã đóng'
+                }.get(t['status'], t['status'])
+                
+                date_str = t['created_at'].strftime('%d/%m/%Y %H:%M')
+                lines.append(f"- Mã {t['ticket_code']} ({date_str}): {status_vi}")
+                lines.append(f"  Vấn đề: {t['issue_description']}")
+                if t['resolved_at']:
+                    lines.append(f"  Hoàn thành lúc: {t['resolved_at'].strftime('%d/%m/%Y %H:%M')}")
+            
+            return "\n".join(lines)
+            
+    except Exception as e:
+        logger.exception(f"get_maintenance_status error: {e}")
+        return f"Lỗi khi tra cứu trạng thái bảo trì: {str(e)}"
+
+
 # ============ Tool 4: get_room_info ============
 
 class GetRoomInfoInput(BaseModel):
-    tenant_id: int = Field(..., description="ID khách thuê")
+    tenant_id: Optional[int] = Field(None, description="ID khách thuê (không bắt buộc, hệ thống tự nhận diện)")
 
 
 @tool(args_schema=GetRoomInfoInput)
-async def get_room_info(tenant_id: int) -> str:
+async def get_room_info(tenant_id: Optional[int] = None) -> str:
     """
     Lấy thông tin phòng hiện tại của tenant.
     """
     from ..core import get_db_pool, current_tenant_id
     
     ctx_tenant_id = current_tenant_id.get()
-    if ctx_tenant_id is not None:
+    if tenant_id is None and ctx_tenant_id is not None:
         tenant_id = ctx_tenant_id
     
     try:
@@ -423,6 +495,7 @@ KNOWLEDGE_TOOLS = [
     get_invoice_detail,
     get_contract_status,
     get_payment_history,
+    get_maintenance_status,
     get_room_info,
     query_policies,
     get_room_by_number,

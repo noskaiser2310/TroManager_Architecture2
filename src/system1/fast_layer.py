@@ -34,6 +34,7 @@ class System1Response:
     confidence: float
     source: str  # "cache", "rag", "fallback"
     latency_ms: int
+    tokens_used: int = 0
     sources: list[str] = field(default_factory=list)
     should_fallback: bool = False
     fallback_reason: Optional[str] = None
@@ -100,7 +101,11 @@ class FastLayer:
             # Step 1: Embedding
             query_embedding = None
             try:
-                query_embedding = await self._get_embedding(request.query)
+                import asyncio
+                query_embedding = await asyncio.wait_for(
+                    self._get_embedding(request.query),
+                    timeout=self.timeout
+                )
             except Exception as emb_err:
                 logger.warning(f"Failed to generate query embedding: {emb_err}. Skipping semantic cache.")
             
@@ -133,6 +138,7 @@ class FastLayer:
             contexts = await self.knowledge.retrieve(
                 request.query,
                 top_k=self.rag_top_k,
+                query_embedding=query_embedding,
             )
             
             if not contexts:
@@ -148,12 +154,17 @@ class FastLayer:
                     fallback_reason="no_knowledge_found",
                 )
             
+            # Truncate history_context to avoid context overflow in System 1
+            history = request.history_context
+            if history and len(history) > 2000:
+                history = "...[truncated]...\n" + history[-2000:]
+                
             # Step 5: LLM generation
             response = await self._generate(
                 query=request.query,
                 contexts=contexts,
                 profile=profile,
-                history_context=request.history_context,
+                history_context=history,
             )
             
             # Step 6: Confidence check
@@ -165,13 +176,14 @@ class FastLayer:
                     confidence=response["confidence"],
                     source="rag",
                     latency_ms=latency,
+                    tokens_used=response.get("tokens_used", 0),
                     sources=[c["source"] for c in contexts],
                     should_fallback=True,
                     fallback_reason="low_confidence",
                 )
             
             # Step 7: Save to cache (async, don't block)
-            if response["confidence"] > 0.95:
+            if response["confidence"] > 0.85 and query_embedding is not None:
                 await self.cache.save(
                     query=request.query,
                     query_embedding=query_embedding,
@@ -190,6 +202,7 @@ class FastLayer:
                 confidence=response["confidence"],
                 source="rag",
                 latency_ms=latency,
+                tokens_used=response.get("tokens_used", 0),
                 sources=[c["source"] for c in contexts],
                 should_fallback=False,
             )
@@ -218,6 +231,8 @@ class FastLayer:
         history_context: str = "",
     ) -> dict:
         """Generate response using Gemini Flash."""
+        import json
+        
         # Build prompt
         prompt = self._build_prompt(query, contexts, profile, history_context)
         
@@ -228,8 +243,17 @@ class FastLayer:
             response_format={"type": "json_object"},
         )
         
-        from ..core import parse_llm_json
-        parsed = parse_llm_json(response.content)
+        content = response.content.strip()
+        if content.startswith("```json"):
+            content = content[7:-3]
+        elif content.startswith("```"):
+            content = content[3:-3]
+            
+        try:
+            parsed = json.loads(content.strip())
+        except json.JSONDecodeError:
+            logger.error(f"Failed to parse LLM JSON in fast_layer: {content}")
+            parsed = {}
         
         if not parsed or "answer" not in parsed:
             parsed = {
@@ -243,6 +267,7 @@ class FastLayer:
         except (ValueError, TypeError):
             parsed["confidence"] = 0.5
             
+        parsed["tokens_used"] = response.total_tokens
         return parsed
 
     
@@ -261,14 +286,39 @@ class FastLayer:
         
         # Tone adjustment
         tone = "professional"
+        profile_data = "(Không có thông tin cá nhân)"
+        tenant_name = "khách"
+        
         if profile:
             tone = getattr(profile, "tone_preference", "professional")
+            tenant_name = getattr(profile, "full_name", "khách")
+            
+            # Serialize profile data for LLM
+            profile_dict = {}
+            if hasattr(profile, "to_dict"):
+                profile_dict = profile.to_dict()
+            elif isinstance(profile, dict):
+                profile_dict = profile
+                
+            # Filter useful info
+            useful_info = {
+                "Họ tên": profile_dict.get("full_name"),
+                "SĐT": profile_dict.get("phone_number"),
+                "Phòng": profile_dict.get("room_id") or profile_dict.get("room_number"),
+                "Ngày bắt đầu thuê": profile_dict.get("lease_start"),
+                "Ngày hết hạn": profile_dict.get("lease_end")
+            }
+            # Remove None values
+            useful_info = {k: v for k, v in useful_info.items() if v}
+            if useful_info:
+                profile_data = "\n".join([f"- {k}: {v}" for k, v in useful_info.items()])
         
         return self._system_prompt_template.format(
             tone=tone,
             query=query,
             contexts=context_text,
-            tenant_name=getattr(profile, "full_name", "khách") if profile else "khách",
+            profile_data=profile_data,
+            tenant_name=tenant_name,
             history_context=history_context or "(Không có lịch sử hội thoại trước đó)",
         )
 

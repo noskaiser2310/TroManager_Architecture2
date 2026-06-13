@@ -160,17 +160,17 @@ class MemoryManager:
         RETURNING memory_id, weight
         """
         async with self.db.acquire() as conn:
-            # Archive memories with weight below threshold
+            # Apply decay first
+            decayed = await conn.fetch(sql, decay_rate, threshold)
+            logger.info(f"Applied decay to {len(decayed)} memories")
+            
+            # Archive memories with weight below threshold (including newly decayed ones)
             await conn.execute("""
             UPDATE user_embeddings
             SET is_archived = TRUE
             WHERE is_archived = FALSE
               AND weight <= $1
             """, threshold)
-            
-            # Apply decay
-            decayed = await conn.fetch(sql, decay_rate, threshold)
-            logger.info(f"Applied decay to {len(decayed)} memories")
     
     async def regenerate_memories(
         self,
@@ -188,24 +188,29 @@ class MemoryManager:
         Returns:
             list of memory_ids mới tạo
         """
-        # Archive old memories
-        async with self.db.acquire() as conn:
-            await conn.execute("""
-            UPDATE user_embeddings
-            SET is_archived = TRUE
-            WHERE tenant_id = $1
-            """, tenant_id)
-        
         # Split summary thành insights riêng biệt
         insights = [s.strip() for s in behavior_summary_text.split("\n") if s.strip()]
         
         memory_ids = []
-        for insight in insights:
-            mid = await self.add_memory(tenant_id, insight, source="persona_optimizer")
-            memory_ids.append(mid)
-        
-        logger.info(f"Regenerated {len(memory_ids)} memories for tenant {tenant_id}")
-        return memory_ids
+        try:
+            for insight in insights:
+                mid = await self.add_memory(tenant_id, insight, source="persona_optimizer")
+                memory_ids.append(mid)
+            
+            # Archive old memories only after successfully creating new ones
+            if memory_ids:
+                async with self.db.acquire() as conn:
+                    await conn.execute("""
+                    UPDATE user_embeddings
+                    SET is_archived = TRUE
+                    WHERE tenant_id = $1 AND memory_id != ALL($2::int[])
+                    """, tenant_id, memory_ids)
+            
+            logger.info(f"Regenerated {len(memory_ids)} memories for tenant {tenant_id}")
+            return memory_ids
+        except Exception as e:
+            logger.error(f"Failed to regenerate memories: {e}")
+            raise
     
     def _row_to_memory(self, row) -> Memory:
         return Memory(

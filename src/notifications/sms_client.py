@@ -62,8 +62,10 @@ class TwilioSMSClient(SMSClient):
     async def send_sms(self, phone_number: str, message: str) -> SMSSendResult:
         start = time.time()
         try:
+            import asyncio
             client = self._get_client()
-            twilio_msg = client.messages.create(
+            twilio_msg = await asyncio.to_thread(
+                client.messages.create,
                 body=message,
                 from_=self.from_number,
                 to=phone_number,
@@ -99,9 +101,8 @@ class VNPTiMessageSMS(SMSClient):
     async def send_sms(self, phone_number: str, message: str) -> SMSSendResult:
         # Implementation tương tự các SMS provider VN
         # Tuỳ thuộc provider cụ thể
-        raise NotImplementedError(
-            "Implement SMS provider cụ thể (esms.vn, speedSMS, etc.)"
-        )
+        logger.warning(f"VNPTiMessageSMS stub called to send SMS to {phone_number}. Not implemented.")
+        return SMSSendResult(success=False, error="Chưa hỗ trợ")
 
 
 def create_sms_client_from_config(config: dict) -> SMSClient:

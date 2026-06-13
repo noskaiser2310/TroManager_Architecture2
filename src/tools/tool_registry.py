@@ -38,7 +38,7 @@ INTENT_TOOLKIT_MAP = {
     # General - luôn có knowledge tools để AI tra cứu nếu cần
     "policy_question": ["knowledge"],
     "general_chat": [],
-    "greeting": ["knowledge"],
+    "greeting": [],
     
     # Background events
     "background_event_invoice_overdue": ["knowledge", "automation"],

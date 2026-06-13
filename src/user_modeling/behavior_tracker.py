@@ -181,7 +181,9 @@ class BehaviorTracker:
         
         can_send = count_this_week < max_per_week
         if last_reminder:
-            hours_since = (datetime.now() - last_reminder).total_seconds() / 3600
+            from datetime import timezone
+            now = datetime.now(timezone.utc) if last_reminder.tzinfo else datetime.utcnow()
+            hours_since = (now - last_reminder).total_seconds() / 3600
             if hours_since < 24:
                 can_send = False
         

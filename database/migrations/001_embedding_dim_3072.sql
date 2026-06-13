@@ -26,9 +26,14 @@ DROP FUNCTION IF EXISTS search_user_memories(INT, vector, INT);
 -- CÁCH AN TOÀN: Tạo table mới, copy data non-vector, swap
 -- CÁCH NHANH (mất vector data): Drop + recreate
 
--- Option A: Bảo toàn data (chỉ giữ metadata, re-embed sau)
-ALTER TABLE user_embeddings ALTER COLUMN embedding TYPE vector(3072) USING NULL;
-ALTER TABLE semantic_cache ALTER COLUMN query_embedding TYPE vector(3072) USING NULL;
+-- Option B: An toàn (Thêm cột mới, re-embed, drop cột cũ sau)
+ALTER TABLE user_embeddings ADD COLUMN embedding_v2 vector(3072);
+-- Cần chạy script re-embed data vào embedding_v2, sau đó:
+-- ALTER TABLE user_embeddings DROP COLUMN embedding;
+-- ALTER TABLE user_embeddings RENAME COLUMN embedding_v2 TO embedding;
+
+ALTER TABLE semantic_cache ADD COLUMN query_embedding_v2 vector(3072);
+-- Tương tự cho semantic_cache
 
 -- 4. Recreate functions với dim mới
 CREATE OR REPLACE FUNCTION search_semantic_cache(

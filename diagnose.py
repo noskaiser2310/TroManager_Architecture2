@@ -2,6 +2,11 @@
 DIAGNOSTIC: Check real system behavior for key failed scenarios
 """
 import requests, time
+import sys
+
+# Fix Unicode print error on Windows
+if sys.stdout.encoding.lower() != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
 
 BASE = 'http://localhost:8000'
 

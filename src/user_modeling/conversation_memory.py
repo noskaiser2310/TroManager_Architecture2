@@ -143,7 +143,7 @@ class ConversationMemory:
         """
         sql = """
         SELECT * FROM conversation_history
-        WHERE tenant_id = $1 AND timestamp > CURRENT_TIMESTAMP - INTERVAL '4 hours'
+        WHERE tenant_id = $1
         ORDER BY timestamp DESC
         LIMIT $2
         """

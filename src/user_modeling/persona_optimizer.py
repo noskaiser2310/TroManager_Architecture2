@@ -9,8 +9,7 @@ import logging
 from typing import Optional, List
 from pydantic import BaseModel, Field
 import asyncpg
-from google import genai
-from google.genai import types
+from ..llm.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +27,7 @@ class FinancialAndHabits(BaseModel):
     living_habits: Optional[str] = Field(description="Ví dụ: Nuôi thú cưng, Thường xuyên nấu ăn, Hay tụ tập")
 
 class Preferences(BaseModel):
-    primary_concerns: Optional[str] = Field(description="Ví dụ: Tiếng ồn, Giá cả, Vệ sinh, An ninh, Wifi")
+    primary_concerns: Optional[List[str]] = Field(description="Ví dụ: ['Tiếng ồn', 'Giá cả', 'Vệ sinh', 'An ninh', 'Wifi']")
     ai_response_style: str = Field(description="AI nên phản hồi: Dạ/vâng thân thiện, Ngắn gọn súc tích, Chuyên nghiệp")
     active_hours: Optional[str] = Field(description="Ví dụ: Sáng, Tối, Nửa đêm (Rất quan trọng để gửi tin nhắn)")
 
@@ -49,9 +48,9 @@ class PersonalizationProfile(BaseModel):
 # ==============================================================================
 
 class PersonaOptimizer:
-    def __init__(self, db_pool: asyncpg.Pool, api_key: str):
+    def __init__(self, db_pool: asyncpg.Pool, llm_client: Optional[LLMClient] = None):
         self.db = db_pool
-        self.client = genai.Client(api_key=api_key)
+        self.client = llm_client if llm_client else LLMClient()
         
     async def optimize_tenant_profile(self, tenant_id: int) -> Optional[PersonalizationProfile]:
         """
@@ -86,20 +85,25 @@ class PersonaOptimizer:
         5. Xuất ra hồ sơ cập nhật dưới định dạng JSON khớp tuyệt đối với schema yêu cầu. (Keys giữ nguyên tiếng Anh, Values phải là Tiếng Việt).
         """
         
-        # 4. Call Gemini 2.5 with Structured Output
+        # 4. Call LLM with Structured Output
         logger.info(f"Running Persona Optimizer for tenant {tenant_id}...")
         try:
-            response = self.client.models.generate_content(
-                model='gemini-3.1-flash-lite',
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=PersonalizationProfile,
-                    temperature=0.2, # Low temp for analytical extraction
-                ),
+            messages = [{"role": "user", "content": prompt}]
+            
+            response = await self.client.generate(
+                messages=messages,
+                temperature=0.2, # Low temp for analytical extraction
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "PersonalizationProfile",
+                        "schema": PersonalizationProfile.model_json_schema(),
+                        "strict": True
+                    }
+                }
             )
             
-            updated_profile_data = json.loads(response.text)
+            updated_profile_data = json.loads(response.content)
             validated_profile = PersonalizationProfile(**updated_profile_data)
             
             # 5. Save back to database

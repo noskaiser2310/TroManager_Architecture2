@@ -186,6 +186,7 @@ class KnowledgeLookup:
         self,
         query: str,
         top_k: Optional[int] = None,
+        query_embedding: Optional[list[float]] = None,
     ) -> list[dict]:
         """
         Retrieve top-k documents liên quan.
@@ -193,6 +194,7 @@ class KnowledgeLookup:
         Args:
             query: Câu hỏi
             top_k: Số lượng kết quả (default: self.top_k)
+            query_embedding: Tùy chọn truyền embedding đã tính toán để tránh tính 2 lần
             
         Returns:
             list of {"text": str, "source": str, "score": float}
@@ -209,9 +211,19 @@ class KnowledgeLookup:
             return await self.retrieve_simple(query, top_k=k)
         
         try:
+            # Format query bundle
+            if query_embedding is not None:
+                try:
+                    from llama_index.core.schema import QueryBundle
+                    query_obj = QueryBundle(query_str=query, embedding=query_embedding)
+                except ImportError:
+                    query_obj = query
+            else:
+                query_obj = query
+                
             # Query retriever — SYNC call, phải chạy trong executor
             nodes = await asyncio.get_event_loop().run_in_executor(
-                None, self._retriever.retrieve, query
+                None, self._retriever.retrieve, query_obj
             )
             
             # Format kết quả
@@ -274,42 +286,9 @@ class KnowledgeLookup:
         if not md_files:
             return []
         
-        # 1. Thử dùng Embedding-based similarity
-        try:
-            # Encode query
-            query_emb = await self.embedding.encode(query)
-            
-            # Read và encode từng file
-            results = []
-            for md_file in md_files:
-                try:
-                    content = md_file.read_text(encoding="utf-8")
-                    if not content.strip():
-                        continue
-                    
-                    # Simple chunking
-                    chunks = self._simple_chunk(content, self.chunk_size, self.chunk_overlap)
-                    
-                    for chunk_idx, chunk in enumerate(chunks):
-                        chunk_emb = await self.embedding.encode(chunk)
-                        similarity = self._cosine_similarity(query_emb, chunk_emb)
-                        
-                        if similarity >= self.similarity_threshold:
-                            results.append({
-                                "text": chunk,
-                                "source": f"{md_file.relative_to(self.knowledge_base_dir)}#{chunk_idx}",
-                                "score": similarity,
-                                "metadata": {},
-                            })
-                except Exception as e:
-                    logger.warning(f"Failed to process {md_file}: {e}")
-            
-            if results:
-                # Sort by score desc
-                results.sort(key=lambda x: x["score"], reverse=True)
-                return results[:k]
-        except Exception as e:
-            logger.warning(f"Embedding retrieval failed (likely limit/quota): {e}. Falling back to keyword search.")
+        # Embedding-based similarity has been removed from retrieve_simple 
+        # to fix BUG-015 (high latency / quota usage).
+        # retrieve_simple is now purely a keyword-matching fallback.
         
         # 2. Fallback: Keyword-based matching (đảm bảo hoạt động kể cả khi API sập)
         import re

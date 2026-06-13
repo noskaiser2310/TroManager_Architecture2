@@ -80,7 +80,7 @@ class ProfileService:
     
     async def get_profile_by_phone(self, phone: str) -> Optional[UserProfile]:
         """Lấy profile theo số điện thoại."""
-        sql = "SELECT * FROM user_profiles WHERE phone_number = $1"
+        sql = "SELECT * FROM user_profiles WHERE phone_number = $1 AND is_active = TRUE"
         async with self.db.acquire() as conn:
             row = await conn.fetchrow(sql, phone)
             if row:
@@ -89,7 +89,7 @@ class ProfileService:
     
     async def get_profile_by_zalo_id(self, zalo_id: str) -> Optional[UserProfile]:
         """Lấy profile theo Zalo ID."""
-        sql = "SELECT * FROM user_profiles WHERE zalo_id = $1"
+        sql = "SELECT * FROM user_profiles WHERE zalo_id = $1 AND is_active = TRUE"
         async with self.db.acquire() as conn:
             row = await conn.fetchrow(sql, zalo_id)
             if row:
@@ -118,6 +118,12 @@ class ProfileService:
             "notification_opt_out", "personalization_profile", "is_active",
         }
         safe_updates = {k: v for k, v in updates.items() if k in allowed_fields}
+        
+        # Validate tone_preference
+        if "tone_preference" in safe_updates:
+            valid_tones = {"professional", "friendly", "concise"}
+            if safe_updates["tone_preference"] not in valid_tones:
+                safe_updates["tone_preference"] = "professional"
         
         if not safe_updates:
             return False

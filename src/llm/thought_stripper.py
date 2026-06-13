@@ -24,15 +24,15 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
-# Pattern để match <thought>...</thought> blocks (greedy, multi-line, DOTALL)
+# Pattern để match <thought>...</thought> hoặc <think>...</think> blocks
 _THOUGHT_PATTERN = re.compile(
-    r"<thought\b[^>]*>.*?</thought\s*>",
+    r"<(?:thought|think)\b[^>]*>.*?</(?:thought|think)\s*>",
     re.DOTALL | re.IGNORECASE,
 )
 
-# Pattern cho trường hợp truncated: <thought> không có </thought>
+# Pattern cho trường hợp truncated
 _THOUGHT_OPEN_PATTERN = re.compile(
-    r"<thought\b[^>]*>.*\Z",
+    r"<(?:thought|think)\b[^>]*>.*\Z",
     re.DOTALL | re.IGNORECASE,
 )
 
@@ -61,7 +61,8 @@ def strip_thought_blocks(
 
     # 2. Nếu còn <thought> mở mà không đóng (truncated response),
     #    strip từ <thought> đến hết
-    if "<thought" in stripped.lower():
+    lower_stripped = stripped.lower()
+    if "<thought" in lower_stripped or "<think" in lower_stripped:
         stripped = _THOUGHT_OPEN_PATTERN.sub("", stripped)
 
     # 3. Cleanup: xóa leading/trailing whitespace, multiple newlines
@@ -82,7 +83,7 @@ def has_thought_block(content: str) -> bool:
     """Check xem content có thought block không."""
     if not content:
         return False
-    return bool(re.search(r"<thought\b", content, re.IGNORECASE))
+    return bool(re.search(r"<(?:thought|think)\b", content, re.IGNORECASE))
 
 
 def extract_thought_and_answer(content: str) -> tuple[Optional[str], str]:

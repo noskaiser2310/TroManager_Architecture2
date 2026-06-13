@@ -28,6 +28,8 @@ from ..user_modeling.services import (
     ActionTypes,
 )
 from ..notifications.metrics import System2Metrics
+from ..tools.tool_registry import get_default_registry
+from datetime import date
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +62,7 @@ class ReActResponse:
     state: ReActState
     latency_ms: int
     actions_taken: list[str] = field(default_factory=list)
+    tokens_used: int = 0
     tone_used: str = "professional"
     personalization_applied: bool = False
     confidence: float = 1.0
@@ -103,8 +106,8 @@ class ReActAgent:
         self.max_tokens = config.get("max_tokens", 8000)
         self.temperature = config.get("temperature", 0.4)
         # Tool execution timeout (giây). Tools nào chậm hơn sẽ bị cancel.
-        # Default 10s — phù hợp với DB query bình thường.
-        self.tool_timeout_seconds = float(config.get("tool_timeout_seconds", 10.0))
+        # Default 30s — phù hợp với DB query bình thường.
+        self.tool_timeout_seconds = float(config.get("tool_timeout_seconds", 30.0))
         # LLM call timeout (giây) cho mỗi iteration. Default 30s.
         # OpenAI client cũng có timeout riêng (config.llm.request_timeout),
         # đây là layer thứ 2 phòng trường hợp LLM API treo.
@@ -148,6 +151,7 @@ class ReActAgent:
             
             # 4. ReAct loop
             iterations = 0
+            total_tokens_used = 0
             executed_tool_calls: set[str] = set()
             for iteration in range(self.max_iterations):
                 iterations = iteration + 1
@@ -158,13 +162,7 @@ class ReActAgent:
                 )
                 
                 # Pass tools trên MỌI iteration để Gemini có thể gọi tool ở bất kỳ bước nào.
-                # Exception: không pass tools nếu message cuối là ToolMessage (tránh lỗi Gemini
-                # không chấp nhận tools binding khi có pending tool response trong history).
-                last_msg = messages[-1] if messages else None
-                from langchain_core.messages import ToolMessage as _TM
-                tools_for_this_iteration = (
-                    request.tools if not isinstance(last_msg, _TM) else None
-                )
+                tools_for_this_iteration = request.tools
                 
                 # a. LLM reasoning (wrap in timeout để tránh hang khi API treo)
                 # Retry tối đa 3 lần với exponential backoff (giải quyết High #8)
@@ -222,7 +220,11 @@ class ReActAgent:
                         state=ReActState.FAILED,
                         latency_ms=latency,
                         actions_taken=actions_taken,
+                        tokens_used=total_tokens_used,
                     )
+
+                if hasattr(response, "usage_metadata") and response.usage_metadata:
+                    total_tokens_used += response.usage_metadata.get("total_tokens", 0)
 
                 messages.append(response)
                 
@@ -243,6 +245,7 @@ class ReActAgent:
                         state=ReActState.COMPLETED,
                         latency_ms=latency,
                         actions_taken=actions_taken,
+                        tokens_used=total_tokens_used,
                         tone_used=context.profile.tone_preference if context.profile else "professional",
                         personalization_applied=context.has_personalization(),
                     )
@@ -254,7 +257,6 @@ class ReActAgent:
                     tc = self._normalize_tool_call(tool_call)
                     try:
                         # 1. Check duplicate tool call
-                        import json
                         tc_sig = f"{tc.get('name')}:{json.dumps(tc.get('args', {}), sort_keys=True)}"
                         if tc_sig in executed_tool_calls:
                             observation = ToolMessage(
@@ -268,26 +270,35 @@ class ReActAgent:
                             
                             # 2. Validate input
                             is_valid, error = self.guardrails.validate_tool_input(tc)
-                        if not is_valid:
-                            observation = ToolMessage(
-                                content=f"Invalid input: {error}",
-                                tool_call_id=tc.get("id", ""),
-                                name=tc.get("name", ""),
-                            )
-                            self.metrics.tool_failures += 1
-                        else:
-                            # Check sensitive
-                            if self.guardrails.is_sensitive_tool(tc.get("name", "")):
-                                tc = await self.guardrails.request_approval(
-                                    tc, request.tenant_id
+                            if not is_valid:
+                                observation = ToolMessage(
+                                    content=f"Invalid input: {error}",
+                                    tool_call_id=tc.get("id", ""),
+                                    name=tc.get("name", ""),
                                 )
-                                if tc.get("requires_approval"):
-                                    observation = ToolMessage(
-                                        content=tc.get("approval_message", "Đang chờ duyệt"),
-                                        tool_call_id=tc.get("id", ""),
-                                        name=tc.get("name", ""),
+                                self.metrics.tool_failures += 1
+                            else:
+                                # Check sensitive
+                                if self.guardrails.is_sensitive_tool(tc.get("name", "")):
+                                    tc = await self.guardrails.request_approval(
+                                        tc, request.tenant_id
                                     )
+                                    if tc.get("requires_approval"):
+                                        observation = ToolMessage(
+                                            content=tc.get("approval_message", "Đang chờ duyệt"),
+                                            tool_call_id=tc.get("id", ""),
+                                            name=tc.get("name", ""),
+                                        )
+                                    else:
+                                        result = await self._execute_tool(tc, request.tools)
+                                        observation = ToolMessage(
+                                            content=str(result),
+                                            tool_call_id=tc.get("id", ""),
+                                            name=tc.get("name", ""),
+                                        )
+                                        actions_taken.append(tc.get("name", ""))
                                 else:
+                                    # Execute normal tool
                                     result = await self._execute_tool(tc, request.tools)
                                     observation = ToolMessage(
                                         content=str(result),
@@ -295,15 +306,6 @@ class ReActAgent:
                                         name=tc.get("name", ""),
                                     )
                                     actions_taken.append(tc.get("name", ""))
-                            else:
-                                # Execute normal tool
-                                result = await self._execute_tool(tc, request.tools)
-                                observation = ToolMessage(
-                                    content=str(result),
-                                    tool_call_id=tc.get("id", ""),
-                                    name=tc.get("name", ""),
-                                )
-                                actions_taken.append(tc.get("name", ""))
 
                             self.metrics.tool_calls_total += 1
                             tool_calls_log.append({
@@ -364,6 +366,7 @@ class ReActAgent:
                 state=ReActState.LOOP_BREAK,
                 latency_ms=latency,
                 actions_taken=actions_taken,
+                tokens_used=total_tokens_used,
             )
         
         except Exception as e:
@@ -376,6 +379,7 @@ class ReActAgent:
                 state=ReActState.FAILED,
                 latency_ms=latency,
                 actions_taken=actions_taken,
+                tokens_used=total_tokens_used if 'total_tokens_used' in locals() else 0,
             )
 
     async def _handle_llm_timeout(
@@ -453,12 +457,10 @@ class ReActAgent:
     
     def _build_system_prompt(self, context: AgentContext, request: ReActRequest) -> str:
         """Build system prompt với context injection."""
-        from ..tools.tool_registry import get_default_registry
         registry = get_default_registry()
         tool_descriptions = registry.describe_tools(request.tools) if request.tools else "Không có công cụ nào"
 
         memories_text = "\n".join([f"- {m['memory_text']}" for m in context.memories]) if context.memories else "Chưa có ký ức"
-        from datetime import date
         current_date = date.today().strftime("%d/%m/%Y")
 
         return self.system_prompt_template.format(

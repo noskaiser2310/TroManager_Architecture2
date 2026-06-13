@@ -120,6 +120,10 @@ class LLMConfig:
     def pro_model(self) -> str:
         # Nếu extra có pro_model riêng, dùng nó; không thì dùng model chính
         return self.llm.extra.get("pro_model", self.llm.model)
+
+    @property
+    def router_model(self) -> str:
+        return self.llm.extra.get("router_model", self.llm.model)
     
     @property
     def embedding_model(self) -> str:
@@ -190,6 +194,7 @@ def load_llm_config(config_path: Optional[str] = None) -> LLMConfig:
         rate_limit_tpm=llm_raw.get("rate_limit", {}).get("tokens_per_minute", 1_000_000),
         extra={
             "pro_model": llm_raw.get("pro_model"),
+            "router_model": llm_raw.get("router_model"),
             "generation": llm_raw.get("advanced", {}).get("generation", {}),
             "safety": llm_raw.get("advanced", {}).get("safety_settings", {}),
         },

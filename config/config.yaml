@@ -104,58 +104,13 @@ llm:
 # =========================================================
 # Router Gateway
 # =========================================================
+# NOTE: Router hiện tại dùng LLMIntentRouter (Direct Intent Routing)
+# với model router_model thay vì keyword classification cũ.
+# Các config keyword dưới đây được giữ lại để tham khảo cho fallback,
+# nhưng không được dùng bởi LLMIntentRouter hiện tại.
 router:
-  threshold_confidence: 0.5
-  
-  sensitive_keywords:
-    - "tiền"
-    - "nợ"
-    - "tiền thuê"
-    - "tiền điện"
-    - "tiền nước"
-    - "cọc"
-    - "hoàn cọc"
-    - "hợp đồng"
-    - "gia hạn"
-    - "thanh lý"
-    - "chấm dứt"
-    - "chuyển phòng"
-    - "đổi phòng"
-    - "hóa đơn"
-    - "bill"
-    - "sao kê"
-    - "phạt"
-    - "vi phạm"
-    
-  complex_keywords:
-    - "hỏng"
-    - "sửa"
-    - "bảo trì"
-    - "bảo hành"
-    - "điều hòa"
-    - "vòi nước"
-    - "gửi xe"
-    - "đăng ký"
-    - "cho thuê"
-    - "tìm phòng"
-    - "phòng trống"
-    - "người ở cùng"
-    - "bạn cùng phòng"
-    - "đề xuất"
-    - "tư vấn"
-    - "gợi ý"
-    
-  safe_keywords:
-    - "wifi"
-    - "mật khẩu"
-    - "internet"
-    - "giờ giấc"
-    - "giờ đóng cửa"
-    - "giờ yên tĩnh"
-    - "nội quy"
-    - "quy định"
-    - "địa chỉ"
-    - "số nhà"
+  # LLM Router timeout (giây) — fallback về System 2 nếu quá thời gian
+  llm_timeout_seconds: 5.0
 
 # =========================================================
 # System 1 (Fast Layer)
@@ -192,13 +147,13 @@ system2:
 
   # Timeout protection (giây) — tránh tool/LLM call treo vô hạn
   tool_timeout_seconds: 30.0    # Mỗi tool call tối đa 30s
-  llm_timeout_seconds: 360.0     # Mỗi LLM call tối đa 360s
+  llm_timeout_seconds: 360.0     # Mỗi LLM call tối đa 90s
 
   # Guardrails fallback message (khi loop breaker triggered)
   guardrails:
     fallback:
       contact_name: "quản lý"
-      contact_phone: "0901.234.567"  # TODO: move to .env LANDLORD_PHONE
+      contact_phone: "${LANDLORD_PHONE:-0901.234.567}"
       message: "Hệ thống đang xử lý yêu cầu phức tạp. Vui lòng liên hệ trực tiếp {contact_label} qua số {contact_phone} để được hỗ trợ nhanh nhất."
 
 # =========================================================

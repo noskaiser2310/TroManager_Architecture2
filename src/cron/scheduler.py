@@ -46,6 +46,7 @@ class CronScheduler:
         memory_manager=None,
         llm_client=None,
         conversation_memory=None,
+        persona_optimizer=None,
     ):
         self.dispatcher = event_dispatcher
         self.config = config or {}
@@ -55,47 +56,67 @@ class CronScheduler:
         self.memory_manager = memory_manager
         self.llm_client = llm_client
         self.conversation_memory = conversation_memory
+        self.persona_optimizer = persona_optimizer
         self.scheduler = AsyncIOScheduler()
         self._setup_jobs()
 
     def _setup_jobs(self):
         """Setup tất cả scheduled jobs."""
-        # Invoice overdue check - daily 9:00 AM
+        
+        cron_config = self.config.get("cron", {}).get("rules", {})
+        
+        def parse_time(time_str: str, default_h: int, default_m: int):
+            if not time_str:
+                return default_h, default_m
+            try:
+                h, m = time_str.split(":")
+                return int(h), int(m)
+            except Exception:
+                return default_h, default_m
+
+        # Invoice overdue check
+        h, m = parse_time(cron_config.get("invoice_overdue", {}).get("check_time"), 9, 0)
         self.scheduler.add_job(
             self._check_invoice_overdue,
-            CronTrigger(hour=9, minute=0),
+            CronTrigger(hour=h, minute=m),
             id="invoice_overdue_check",
             replace_existing=True,
         )
 
-        # Payment due soon - daily 8:00 AM
+        # Payment due soon
+        h, m = parse_time(cron_config.get("payment_due_soon", {}).get("check_time"), 8, 0)
         self.scheduler.add_job(
             self._check_payment_due_soon,
-            CronTrigger(hour=8, minute=0),
+            CronTrigger(hour=h, minute=m),
             id="payment_due_check",
             replace_existing=True,
         )
 
-        # Contract expiring - monthly day 1 at 10:00 AM
+        # Contract expiring
+        h, m = parse_time(cron_config.get("contract_expiring", {}).get("check_time"), 10, 0)
+        day = cron_config.get("contract_expiring", {}).get("check_day", 1)
         self.scheduler.add_job(
             self._check_contract_expiring,
-            CronTrigger(day=1, hour=10, minute=0),
+            CronTrigger(day=day, hour=h, minute=m),
             id="contract_expiring_check",
             replace_existing=True,
         )
 
-        # Maintenance reminder - weekly Monday 8:00 AM
+        # Maintenance reminder
+        h, m = parse_time(cron_config.get("maintenance_reminder", {}).get("check_time"), 8, 0)
+        dow = cron_config.get("maintenance_reminder", {}).get("check_day_of_week", "mon")
         self.scheduler.add_job(
             self._check_maintenance_reminder,
-            CronTrigger(day_of_week="mon", hour=8, minute=0),
+            CronTrigger(day_of_week=dow, hour=h, minute=m),
             id="maintenance_reminder_check",
             replace_existing=True,
         )
 
-        # Birthday check - daily 7:00 AM
+        # Birthday check
+        h, m = parse_time(cron_config.get("birthday_greeting", {}).get("check_time"), 7, 0)
         self.scheduler.add_job(
             self._check_birthdays,
-            CronTrigger(hour=7, minute=0),
+            CronTrigger(hour=h, minute=m),
             id="birthday_check",
             replace_existing=True,
         )
@@ -387,18 +408,11 @@ class CronScheduler:
     async def _persona_optimizer_daily(self):
         """
         Persona Optimizer - Cuối mỗi ngày, tổng hợp behavior logs của mỗi tenant
-        thành 3-5 insights ngắn gọn và lưu vào user_embeddings (memories).
-
-        Quy trình:
-        1. Lấy tất cả active tenants
-        2. Với mỗi tenant, lấy behavior logs trong 30 ngày gần nhất
-        3. Gọi LLM (pro) để tóm tắt thành insights
-        4. Archive memories cũ, lưu insights mới
+        và cập nhật personalization_profile thông qua PersonaOptimizer.
         """
         logger.info("[CRON] Running Persona Optimizer daily job...")
-        if not (self.profile_service and self.behavior_tracker
-                and self.memory_manager and self.llm_client):
-            logger.warning("Required services not set, skipping")
+        if not self.profile_service or not self.persona_optimizer:
+            logger.warning("Required services (profile_service, persona_optimizer) not set, skipping")
             return
 
         try:
@@ -410,77 +424,18 @@ class CronScheduler:
 
             for tenant in tenants:
                 try:
-                    # 1. Lấy behavior logs 30 ngày
-                    logs = await self.behavior_tracker.get_logs(
-                        tenant_id=tenant.tenant_id,
-                        days=30,
-                        limit=200,
-                    )
-                    if not logs:
-                        continue
-
-                    # 2. Format logs thành text cho LLM
-                    log_lines = []
-                    for log in logs[:100]:
-                        ts = log.timestamp.strftime("%Y-%m-%d")
-                        log_lines.append(
-                            f"- [{ts}] {log.action_type}: {log.description}"
-                        )
-                    logs_text = "\n".join(log_lines)
-
-                    # 3. Gọi LLM pro để tóm tắt thành 3-5 insights
-                    prompt = (
-                        "Phan tich 30 ngay hanh vi cua khach thue va duc ket thanh "
-                        "3-5 insights ngan gon (toi da 100 ky tu/insight). "
-                        "Luu y: than thien, nhan van, khong phan biet.\n\n"
-                        f"Ten khach: {tenant.full_name}\n"
-                        f"Phong: {tenant.room_id}\n\n"
-                        f"Hanh vi:\n{logs_text}\n\n"
-                        "Tra ve JSON: {\"insights\": [\"insight1\", \"insight2\", ...]}"
-                    )
-                    response = await self.llm_client.generate(
-                        messages=[{"role": "user", "content": prompt}],
-                        temperature=0.3,
-                        max_tokens=600,
-                        response_format={"type": "json_object"},
-                    )
-
-                    # 4. Parse JSON response (robust parser handles malformed JSON)
-                    parsed = parse_llm_json(
-                        response.content,
-                        expected_key="insights",
-                        fallback_to_text=True,
-                        max_items=10,
-                    )
-                    insights = parsed.get("insights", [])
-
-                    if not insights:
+                    profile = await self.persona_optimizer.optimize_tenant_profile(tenant.tenant_id)
+                    if profile:
+                        success_count += 1
                         logger.debug(
                             f"[CRON] Persona Optimizer: tenant {tenant.tenant_id} "
-                            f"no insights extracted (status={parsed.get('_parse_status')})"
+                            f"updated successfully"
                         )
-                        continue
-
-                    # Log nếu parser phải fallback (LLM trả về text không phải JSON)
-                    if parsed.get("_parse_status") == "fallback":
-                        logger.info(
+                    else:
+                        logger.debug(
                             f"[CRON] Persona Optimizer: tenant {tenant.tenant_id} "
-                            f"LLM returned non-JSON, used text fallback "
-                            f"({len(insights)} insights)"
+                            f"no optimization performed (no recent convos)"
                         )
-
-                    # 5. Archive memories cũ, lưu insights mới
-                    summary_text = "\n".join(insights)
-                    await self.memory_manager.regenerate_memories(
-                        tenant_id=tenant.tenant_id,
-                        behavior_summary_text=summary_text,
-                    )
-
-                    success_count += 1
-                    logger.debug(
-                        f"[CRON] Persona Optimizer: tenant {tenant.tenant_id} "
-                        f"updated with {len(insights)} insights"
-                    )
 
                 except Exception as e:
                     error_count += 1

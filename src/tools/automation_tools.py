@@ -184,15 +184,24 @@ async def create_maintenance_ticket(
             if not room_id:
                 return f"Tenant {tenant_id} chưa có phòng - không thể tạo ticket."
             
-            ticket_code = _generate_ticket_code()
             title = f"{category}: {issue[:50]}"
             
-            ticket_id = await conn.fetchval("""
-                INSERT INTO maintenance_tickets 
-                (ticket_code, tenant_id, room_id, issue_category, title, description, priority, status)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, 'open')
-                RETURNING ticket_id
-            """, ticket_code, tenant_id, room_id, category, title, issue, priority)
+            import asyncpg
+            ticket_id = None
+            for attempt in range(3):
+                ticket_code = _generate_ticket_code()
+                try:
+                    ticket_id = await conn.fetchval("""
+                        INSERT INTO maintenance_tickets 
+                        (ticket_code, tenant_id, room_id, issue_category, title, description, priority, status)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, 'open')
+                        RETURNING ticket_id
+                    """, ticket_code, tenant_id, room_id, category, title, issue, priority)
+                    break
+                except asyncpg.exceptions.UniqueViolationError:
+                    if attempt == 2:
+                        return "Hệ thống đang quá tải khi tạo mã phiếu (trùng lặp). Vui lòng thử lại sau."
+                    continue
             
             # Log behavior
             await _log_behavior(
@@ -266,30 +275,14 @@ async def send_payment_reminder(
             if not invoice:
                 return f"Không tìm thấy hóa đơn {invoice_id} của tenant {tenant_id}"
             
-            # Tạo approval request
-            tool_args = json.dumps({
-                "tenant_id": tenant_id,
-                "invoice_id": invoice_id,
-                "tone": tone,
-                "amount": float(invoice['total_amount']),
-                "days_overdue": invoice['days_overdue']
-            })
-            
-            approval_id = await conn.fetchval("""
-                INSERT INTO approval_queue 
-                (tool_name, tool_args, tenant_id, requested_by, approver_role, status)
-                VALUES ('send_payment_reminder', $1::jsonb, $2, 'system', 'landlord', 'pending')
-                RETURNING approval_id
-            """, tool_args, tenant_id)
-            
+            # Tạo thông điệp trả về LLM để báo LLM tạo approval
+            # theo đúng chuẩn thay vì tự động insert vào database
             return (
-                f"Đã tạo yêu cầu nhắc thanh toán #{approval_id}.\n"
-                f"- Khách: {invoice['full_name']}\n"
-                f"- Số tiền: {float(invoice['total_amount']):,.0f}đ\n"
-                f"- Quá hạn: {invoice['days_overdue']} ngày\n"
-                f"- Tông giọng: {tone}\n"
-                f"\nĐang chờ quản lý duyệt trước khi gửi."
+                f"SENSITIVE_ACTION_REQUIRED: Tool `send_payment_reminder` requires manager approval.\n"
+                f"Lý do: Nhắc nhở thanh toán {float(invoice['total_amount']):,.0f}đ quá hạn {invoice['days_overdue']} ngày.\n"
+                f"Vui lòng thông báo cho người dùng rằng hành động này cần chờ quản lý duyệt."
             )
+
     
     except Exception as e:
         logger.exception(f"send_payment_reminder error: {e}")
@@ -326,7 +319,7 @@ async def schedule_room_viewing(tenant_id: int, room_id: int, datetime_str: str)
                 tenant_id
             )
             room = await conn.fetchrow(
-                "SELECT room_number, floor, monthly_rent FROM rooms WHERE room_id = $1",
+                "SELECT room_number, floor, monthly_rent, status FROM rooms WHERE room_id = $1",
                 room_id
             )
 
@@ -335,6 +328,9 @@ async def schedule_room_viewing(tenant_id: int, room_id: int, datetime_str: str)
 
             if room['room_number'] is None:
                 return f"Phòng {room_id} không tồn tại."
+
+            if room['status'] not in ['available', 'vacant']:
+                return f"Phòng {room['room_number']} đang ở trạng thái '{room['status']}', không thể đặt lịch xem."
 
             # Persist appointment to DB
             appointment_id = await conn.fetchval("""
@@ -397,10 +393,24 @@ async def update_user_preference(tenant_id: int, category: str, preference_key: 
             profile = row['personalization_profile']
             if isinstance(profile, str):
                 profile = json.loads(profile)
+            # Đảm bảo category tồn tại và hợp lệ
+            valid_categories = ["demographics", "personality_traits", "preferences", "interaction_patterns"]
+            if category not in valid_categories:
+                return f"Lỗi: Category '{category}' không hợp lệ. Phải thuộc {valid_categories}"
+            
+            valid_keys = {
+                "demographics": ["occupation", "age_group", "family_status", "work_location"],
+                "personality_traits": ["openness", "conscientiousness", "communication_style"],
+                "preferences": ["communication_tone", "contact_method", "amenities"],
+                "interaction_patterns": ["active_hours", "response_time", "complaint_frequency", "payment_habit"]
+            }
+            
+            if preference_key not in valid_keys.get(category, []):
+                return f"Lỗi: Key '{preference_key}' không hợp lệ cho category '{category}'. Các key hợp lệ: {valid_keys.get(category, [])}"
+
             if not profile:
                 profile = {}
                 
-            # Đảm bảo category tồn tại
             if category not in profile:
                 profile[category] = {}
                 
