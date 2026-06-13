@@ -173,6 +173,7 @@ def create_default_router(config: Optional[dict] = None) -> RouterGateway:
                 "cảm ơn", "thanks", "ok", "dạ", "vâng",
                 "wifi", "mật khẩu wifi", "pass wifi",
                 "rác", "đổ rác",
+                "đặt cọc", "tiền cọc", "mất cọc",
             ],
             "threshold_confidence": 0.5,
         }

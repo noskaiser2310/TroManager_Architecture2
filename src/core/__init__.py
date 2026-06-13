@@ -51,6 +51,7 @@ def get_knowledge_lookup():
             "Knowledge lookup not initialized. "
             "Call set_knowledge_lookup() in app lifespan startup."
         )
+    return _knowledge_lookup
 
 
 # ============ Notifications ============

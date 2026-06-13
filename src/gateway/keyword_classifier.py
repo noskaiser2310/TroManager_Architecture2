@@ -139,6 +139,7 @@ class KeywordClassifier:
             ("tìm phòng", "room_recommendation"),
             ("đổi phòng", "room_transfer"),
             ("chuyển phòng", "room_transfer"),
+            ("đặt cọc", "policy_question"),  # System 1 cache handles this
             ("hoàn cọc", "billing_inquiry"),
             ("hóa đơn", "billing_inquiry"),
             ("hợp đồng", "contract_inquiry"),

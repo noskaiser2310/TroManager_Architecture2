@@ -191,8 +191,8 @@ system2:
   tool_loading: "intent_based"  # intent_based, all
 
   # Timeout protection (giây) — tránh tool/LLM call treo vô hạn
-  tool_timeout_seconds: 10.0    # Mỗi tool call tối đa 10s
-  llm_timeout_seconds: 90.0     # Mỗi LLM call tối đa 90s
+  tool_timeout_seconds: 30.0    # Mỗi tool call tối đa 30s
+  llm_timeout_seconds: 360.0     # Mỗi LLM call tối đa 360s
 
   # Guardrails fallback message (khi loop breaker triggered)
   guardrails:

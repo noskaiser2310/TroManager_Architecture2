@@ -39,7 +39,7 @@ class KnowledgeLookup:
         self.knowledge_base_dir = Path(knowledge_base_dir)
         
         self.top_k = config.get("rag_top_k", 3)
-        self.similarity_threshold = config.get("rag_similarity_threshold", 0.3)  # default thấp hơn 0.5 để retrieve được
+        self.similarity_threshold = config.get("rag_similarity_threshold", 0.5)  # ngưỡng lọc độ liên quan tối thiểu
         self.chunk_size = config.get("rag_chunk_size", 512)
         self.chunk_overlap = config.get("rag_chunk_overlap", 50)
         
@@ -494,7 +494,7 @@ def build_knowledge_lookup(
     if config is None:
         config = {
             "rag_top_k": 3,
-            "rag_similarity_threshold": 0.3,  # ngưỡng thấp để không bỏ sót kết quả
+            "rag_similarity_threshold": 0.5,  # ngưỡng lọc kết quả liên quan
             "rag_chunk_size": 512,
             "rag_chunk_overlap": 50,
         }

@@ -100,13 +100,18 @@ class LLMClient:
         self._client = self._build_client(self._current_key)
 
         # Thought stripping: bật mặc định cho thinking models
+        # Có thể tắt qua config: extra.strip_thought = false
         self._strip_thought = config.llm.extra.get("strip_thought", True)
+
+        from ..core.rate_limiter import RateLimiter, RateLimitConfig
+        rpm = config.llm.extra.get("rate_limit_rpm", 60)
+        self._rate_limiter = RateLimiter(RateLimitConfig(requests_per_minute=rpm, requests_per_hour=rpm*60))
 
         logger.info(
             f"LLMClient initialized: model={self.model_name}, "
-            f"base_url={self._base_url}, "
-            f"keys={self._key_rotator.key_count}, "
-            f"strip_thought={self._strip_thought}"
+            f"base_url={config.llm.base_url}, "
+            f"strip_thought={self._strip_thought}, "
+            f"rate_limit_rpm={rpm}"
         )
 
     def _build_client(self, api_key: str) -> AsyncOpenAI:
@@ -157,6 +162,10 @@ class LLMClient:
         Returns:
             LLMResponse
         """
+        allowed, reason = await self._rate_limiter.check("llm_global")
+        if not allowed:
+            raise RateLimitError(message=f"Global LLM Rate limit exceeded: {reason}", response=None, body=None)
+
         start = time.time()
         
         # Convert LLMMessage to dict nếu cần
@@ -276,6 +285,10 @@ class LLMClient:
         LangChain-compatible async invoke.
         Returns AIMessage-like object.
         """
+        allowed, reason = await self._rate_limiter.check("llm_global")
+        if not allowed:
+            raise RateLimitError(message=f"Global LLM Rate limit exceeded: {reason}", response=None, body=None)
+
         msg_dicts = []
         include_tool_calls_in_history = tools is not None
         for m in messages:

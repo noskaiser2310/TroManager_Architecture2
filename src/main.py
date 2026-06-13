@@ -772,23 +772,6 @@ async def _process_chat(request: ChatRequest, session_id: str) -> ChatResponse:
             )
         except Exception as e:
             logger.warning(f"Failed to save conversation turn: {e}")
-            
-        # Lên lịch chạy Persona Optimizer (Session-based, trễ 1 ngày)
-        if container.persona_optimizer and container.cron_scheduler:
-            try:
-                from datetime import datetime, timedelta
-                run_time = datetime.now() + timedelta(days=1)
-                container.cron_scheduler.scheduler.add_job(
-                    container.persona_optimizer.optimize_tenant_profile,
-                    'date',
-                    run_date=run_time,
-                    args=[request.tenant_id],
-                    id=f"optimize_persona_{request.tenant_id}",
-                    replace_existing=True
-                )
-                logger.info(f"Scheduled Persona Optimizer for tenant {request.tenant_id} at {run_time}")
-            except Exception as e:
-                logger.warning(f"Failed to schedule Persona Optimizer: {e}")
 
     return ChatResponse(
         answer=response_answer,

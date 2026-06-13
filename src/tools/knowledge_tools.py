@@ -334,12 +334,14 @@ async def query_policies(query: str, tenant_id: Optional[int] = None) -> str:
                 "Vui lòng liên hệ quản lý 0901-234-567 để được hỗ trợ."
             )
         
-        lines = ["Thông tin tìm được từ Knowledge Base:"]
+        lines = ["Thông tin tìm được từ Knowledge Base (hãy trích dẫn trực tiếp):"]
         for r in results:
             source_label = r.get('source', 'không rõ nguồn')
-            score_label = f"{r['score']:.2f}" if r.get('score') else "N/A"
-            lines.append(f"\n[Nguồn: {source_label} | Độ liên quan: {score_label}]")
+            score_label = "{:.0%}".format(r['score']) if r.get('score') else "N/A"
+            lines.append("\n[Nguồn: {} | Độ liên quan: {}]".format(source_label, score_label))
             lines.append(r['text'][:600])
+        
+        lines.append("\n-- HƯỚNG DẪN: Chỉ trả lời dựa trên thông tin từ KB. Nếu không có dữ liệu cho câu hỏi cụ thể, hãy nói 'theo quy định chung' kèm thông tin có sẵn. TUYỆT ĐỐI KHÔNG thêm câu 'sự cố kỹ thuật' hay 'hệ thống lỗi' khi KB đã trả về dữ liệu bình thường.")
         
         return "\n".join(lines)
     
