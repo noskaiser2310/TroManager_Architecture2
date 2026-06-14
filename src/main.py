@@ -1185,7 +1185,7 @@ async def rate_limit_stats(key: str):
     """Xem stats rate limit cho 1 key (tenant:id, ip:..., zalo:...)."""
     if not container.rate_limiter:
         raise HTTPException(status_code=503, detail="RateLimiter not initialized")
-    return container.rate_limiter.get_stats(key)
+    return await container.rate_limiter.get_stats(key)
 
 
 @app.post("/admin/rate-limit/reset/{key}", dependencies=[Depends(require_admin_key)])
@@ -1196,6 +1196,30 @@ async def rate_limit_reset(key: str):
     await container.rate_limiter.reset(key)
     return {"key": key, "status": "reset"}
 
+
+# ============ Debug Endpoints ============
+
+@app.post("/debug/trigger-persona")
+async def trigger_persona():
+    """Debug endpoint to trigger persona optimizer"""
+    try:
+        scheduler = container.cron_scheduler
+        await scheduler._persona_optimizer_daily()
+        return {"status": "success", "message": "Persona optimizer job executed"}
+    except Exception as e:
+        logger.error(f"Error triggering persona: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/debug/trigger-invoice-cron")
+async def trigger_invoice_cron():
+    """Debug endpoint to trigger invoice overdue cron"""
+    try:
+        scheduler = container.cron_scheduler
+        await scheduler._check_invoice_overdue()
+        return {"status": "success", "message": "Invoice overdue job executed"}
+    except Exception as e:
+        logger.error(f"Error triggering invoice cron: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ============ Run ============
 

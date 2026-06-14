@@ -1,0 +1,84 @@
+# ============================================================
+# .dockerignore — TroManager
+# Những gì KHÔNG được copy vào Docker build context
+# ============================================================
+
+# Git
+.git/
+.gitignore
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Secrets & local config (inject qua env_file / environment)
+.env
+.env.local
+*.local
+config/llm_config.local.yaml
+
+# Tests (không cần trong production image)
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+pytest.ini
+
+# Dev/temp files
+temp/
+scratch/
+docs/
+diagrams/
+
+# Logs
+*.log
+logs/
+server_err.log
+server_out.log
+
+# Database data volumes (không copy vào image)
+database/pg_data/
+*.db
+*.sqlite
+*.sqlite3
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build artifacts
+build/
+dist/
+*.whl
+*.tar.gz
+
+# LaTeX
+*.aux
+*.toc
+*.out
+*.tex
+
+# Docs
+README.md
+ROADMAP.md
+TechReport.md
+TechReport.pdf
+PROJECT_STATUS.md

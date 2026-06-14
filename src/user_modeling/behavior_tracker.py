@@ -131,7 +131,7 @@ class BehaviorTracker:
             COUNT(*) FILTER (WHERE action_type LIKE 'auto_%') AS auto_count,
             MIN(timestamp) AS first_int,
             MAX(timestamp) AS last_int,
-            COALESCE(AVG((metadata->>'delay_days')::FLOAT) FILTER (WHERE action_type = 'late_payment'), 0.0) AS avg_delay
+            COALESCE(AVG(COALESCE((metadata->>'delay_days')::FLOAT, SUBSTRING(description FROM 'trễ ([0-9]+) ngày')::FLOAT)) FILTER (WHERE action_type = 'late_payment'), 0.0) AS avg_delay
         FROM behavior_logs
         WHERE tenant_id = $1
           AND timestamp > CURRENT_TIMESTAMP - $2 * INTERVAL '1 day'

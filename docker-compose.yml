@@ -1,20 +1,106 @@
 version: '3.8'
 
+# ============================================================
+# TroManager — Docker Compose
+# Architecture #2: Router-Centric ReAct (Dual-Process)
+#
+# Services:
+#   db      — PostgreSQL 16 + pgvector (3072-dim)
+#   app     — FastAPI server (port 8000)
+#   migrate — Chạy migrations tự động khi startup
+#
+# Sử dụng:
+#   docker compose up -d              # Khởi động tất cả
+#   docker compose up -d db           # Chỉ database
+#   docker compose logs -f app        # Xem log server
+#   docker compose down               # Dừng và xóa containers
+# ============================================================
+
 services:
+
+  # -----------------------------------------------------------
+  # PostgreSQL 16 + pgvector (3072-dim HNSW index)
+  # -----------------------------------------------------------
   db:
     image: ankane/pgvector:v0.5.1
     container_name: tromanager_db
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-tromanager_dev}
       POSTGRES_DB: tromanager
     ports:
       - "5432:5432"
     volumes:
       - tromanager_pgdata:/var/lib/postgresql/data
-      - ./database/schema.sql:/docker-entrypoint-initdb.d/1_schema.sql
-      - ./database/seed_data.sql:/docker-entrypoint-initdb.d/2_seed_data.sql
+      # Auto-init schema + seed khi khởi tạo lần đầu (chỉ chạy 1 lần)
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./database/seed_data.sql:/docker-entrypoint-initdb.d/02_seed_data.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tromanager"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # -----------------------------------------------------------
+  # Database Migrations (chạy sau khi db healthy, rồi exit)
+  # -----------------------------------------------------------
+  migrate:
+    image: ankane/pgvector:v0.5.1
+    container_name: tromanager_migrate
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${DB_PASSWORD:-tromanager_dev}
+    volumes:
+      - ./database/migrations:/migrations
+    command: >
+      bash -c "
+        for f in /migrations/*.sql; do
+          echo 'Applying migration: '$$f;
+          psql -h db -U postgres -d tromanager -f $$f;
+        done;
+        echo 'All migrations applied.'
+      "
+    restart: on-failure
+
+  # -----------------------------------------------------------
+  # TroManager FastAPI Application
+  # -----------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tromanager_app
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Override DB host để trỏ vào container db (không phải localhost)
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: tromanager
+      DB_USER: postgres
+    volumes:
+      # Mount config + knowledge base (hot-reload không cần rebuild)
+      - ./config:/app/config:ro
+      - ./knowledge_base:/app/knowledge_base:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     restart: unless-stopped
 
 volumes:
   tromanager_pgdata:
+    driver: local

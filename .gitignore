@@ -93,3 +93,6 @@ docs/
 diagrams/
 tests/
 pytest.ini
+ROADMAP.md
+techreport.tex
+TechReport.md

@@ -7,6 +7,8 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Optional
+import uuid
+import unicodedata
 
 from ..system2.react_agent import ReActAgent, ReActRequest
 from ..user_modeling.services import BehaviorTracker, ActionTypes, ProfileService
@@ -109,12 +111,13 @@ class EventDispatcher:
                     
                     event.data["delayed_from_golden_time"] = True
                     
+                    job_id = f"delayed_{event.event_type}_{event.tenant_id}_{uuid.uuid4().hex[:8]}"
                     self.cron_scheduler.scheduler.add_job(
                         self.dispatch,
                         trigger='date',
                         run_date=next_time,
                         args=[event],
-                        id=f"delayed_{event.event_type}_{event.tenant_id}_{int(datetime.now().timestamp())}"
+                        id=job_id
                     )
                     return f"DELAYED: Scheduled for golden time at {next_time}"
         
@@ -164,13 +167,27 @@ class EventDispatcher:
         """Parse active_hours string into standard slots."""
         if not active_hours:
             return []
+        
+        # Remove accents for relaxed matching
+        active_hours_no_accent = ''.join(
+            c for c in unicodedata.normalize('NFD', active_hours)
+            if unicodedata.category(c) != 'Mn'
+        ).lower()
+        
         active_hours = active_hours.lower()
         slots = []
-        if "sáng" in active_hours: slots.append("sáng")
-        if "trưa" in active_hours: slots.append("trưa")
-        if "chiều" in active_hours: slots.append("chiều")
-        if "tối" in active_hours: slots.append("tối")
-        if "nửa đêm" in active_hours or "đêm" in active_hours: slots.append("đêm")
+        
+        if "sáng" in active_hours or "sang" in active_hours_no_accent or "morning" in active_hours: 
+            slots.append("sáng")
+        if "trưa" in active_hours or "trua" in active_hours_no_accent or "noon" in active_hours: 
+            slots.append("trưa")
+        if "chiều" in active_hours or "chieu" in active_hours_no_accent or "afternoon" in active_hours: 
+            slots.append("chiều")
+        if "tối" in active_hours or "toi" in active_hours_no_accent or "evening" in active_hours: 
+            slots.append("tối")
+        if "đêm" in active_hours or "dem" in active_hours_no_accent or "night" in active_hours: 
+            slots.append("đêm")
+            
         return slots
 
     def _is_golden_time(self, slots: list[str]) -> bool:

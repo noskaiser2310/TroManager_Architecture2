@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, date
 from typing import Optional
+import asyncio
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -422,28 +423,34 @@ class CronScheduler:
             success_count = 0
             error_count = 0
 
-            for tenant in tenants:
-                try:
-                    profile = await self.persona_optimizer.optimize_tenant_profile(tenant.tenant_id)
-                    if profile:
-                        success_count += 1
-                        logger.debug(
-                            f"[CRON] Persona Optimizer: tenant {tenant.tenant_id} "
-                            f"updated successfully"
-                        )
-                    else:
-                        logger.debug(
-                            f"[CRON] Persona Optimizer: tenant {tenant.tenant_id} "
-                            f"no optimization performed (no recent convos)"
+            # Limit concurrency to 10 parallel LLM calls to avoid rate limiting / overload
+            sem = asyncio.Semaphore(10)
+
+            async def process_tenant(tenant):
+                nonlocal success_count, error_count
+                async with sem:
+                    try:
+                        profile = await self.persona_optimizer.optimize_tenant_profile(tenant.tenant_id)
+                        if profile:
+                            success_count += 1
+                            logger.debug(
+                                f"[CRON] Persona Optimizer: tenant {tenant.tenant_id} "
+                                f"updated successfully"
+                            )
+                        else:
+                            logger.debug(
+                                f"[CRON] Persona Optimizer: tenant {tenant.tenant_id} "
+                                f"no optimization performed (no recent convos)"
+                            )
+                    except Exception as e:
+                        error_count += 1
+                        logger.warning(
+                            f"[CRON] Persona Optimizer failed for tenant "
+                            f"{tenant.tenant_id}: {e}"
                         )
 
-                except Exception as e:
-                    error_count += 1
-                    logger.warning(
-                        f"[CRON] Persona Optimizer failed for tenant "
-                        f"{tenant.tenant_id}: {e}"
-                    )
-                    continue
+            tasks = [process_tenant(tenant) for tenant in tenants]
+            await asyncio.gather(*tasks, return_exceptions=True)
 
             logger.info(
                 f"[CRON] Persona Optimizer done: {success_count} success, "

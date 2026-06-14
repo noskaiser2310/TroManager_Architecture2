@@ -49,6 +49,12 @@ class KnowledgeLookup:
         self._loaded_doc_count = 0
         self._index_build_attempted = False
         self.persist_dir = Path("config/llama_index_storage")
+
+        # Embedding-based fallback cache (pre-loaded chunks + pre-computed embeddings)
+        self._chunk_cache = []          # list of {"text": str, "source": str}
+        self._chunk_embeddings = []     # list of list[float] corresponding to chunk_cache
+        self._chunk_cache_built = False
+        self._chunk_cache_building = False
     
     def _build_index(self):
         """
@@ -266,43 +272,118 @@ class KnowledgeLookup:
             logger.exception(f"RAG retrieval error: {e}")
             return []
     
+    async def _build_chunk_cache(self):
+        """Pre-load all .md files, chunk them, and pre-compute embeddings."""
+        if self._chunk_cache_built or self._chunk_cache_building:
+            return
+        self._chunk_cache_building = True
+
+        try:
+            if not self.knowledge_base_dir.exists():
+                logger.warning(f"Knowledge base dir not found: {self.knowledge_base_dir}")
+                return
+
+            md_files = list(self.knowledge_base_dir.rglob("*.md"))
+            if not md_files:
+                return
+
+            chunks = []
+            for md_file in md_files:
+                try:
+                    content = md_file.read_text(encoding="utf-8")
+                    if not content.strip():
+                        continue
+                    file_chunks = self._simple_chunk(content, self.chunk_size, self.chunk_overlap)
+                    for idx, chunk in enumerate(file_chunks):
+                        source = str(md_file.relative_to(self.knowledge_base_dir))
+                        chunks.append({"text": chunk, "source": f"{source}#{idx}"})
+                except Exception as ex:
+                    logger.warning(f"Failed to read {md_file}: {ex}")
+
+            if not chunks:
+                return
+
+            # Compute embeddings for all chunks in batch
+            try:
+                texts = [c["text"] for c in chunks]
+                if hasattr(self.embedding, "encode_batch"):
+                    embeddings = await self.embedding.encode_batch(texts)
+                else:
+                    embeddings = [await self.embedding.encode(t) for t in texts]
+
+                self._chunk_cache = chunks
+                self._chunk_embeddings = embeddings
+                self._chunk_cache_built = True
+                logger.info(f"[KnowledgeLookup] Pre-computed embeddings for {len(chunks)} chunks")
+            except Exception as e:
+                logger.warning(f"[KnowledgeLookup] Embedding batch failed ({e}), using keyword-only fallback")
+                # Store chunks without embeddings (keyword-only will work)
+                self._chunk_cache = chunks
+                self._chunk_cache_built = True
+        except Exception as e:
+            logger.exception(f"[KnowledgeLookup] Failed to build chunk cache: {e}")
+        finally:
+            self._chunk_cache_building = False
+
     async def retrieve_simple(
         self,
         query: str,
         top_k: Optional[int] = None,
     ) -> list[dict]:
         """
-        Simplified retrieval - chỉ dùng embedding + cosine similarity
-        không qua LlamaIndex (fallback khi LlamaIndex không available).
-        Nếu API embedding bị lỗi hoặc hết quota, tự động fallback sang tìm kiếm theo từ khóa (Keyword/TF-IDF).
+        Simplified retrieval - ưu tiên embedding similarity, fallback keyword.
+        
+        Chiến lược:
+        1. Build chunk cache (pre-load + pre-embed) nếu chưa có.
+        2. Embed query → cosine similarity với tất cả chunks → top-k.
+        3. Nếu embedding API lỗi → keyword-based fallback.
         """
         k = top_k or self.top_k
-        
-        # Load all .md files
+
+        # Build chunk cache if not yet built
+        if not self._chunk_cache_built and not self._chunk_cache_building:
+            await self._build_chunk_cache()
+
+        # Try embedding-based retrieval first
+        if self._chunk_cache_built and self._chunk_embeddings:
+            try:
+                query_vec = await self.embedding.encode(query)
+                scored = []
+                for i, chunk in enumerate(self._chunk_cache):
+                    if i < len(self._chunk_embeddings):
+                        score = self._cosine_similarity(query_vec, self._chunk_embeddings[i])
+                        if score > self.similarity_threshold:
+                            scored.append({
+                                "text": chunk["text"],
+                                "source": chunk["source"],
+                                "score": score,
+                                "metadata": {},
+                            })
+                scored.sort(key=lambda x: x["score"], reverse=True)
+                if scored:
+                    logger.debug(f"[retrieve_simple] Embedding: {len(scored)} results for '{query[:50]}'")
+                    return scored[:k]
+                else:
+                    logger.debug("[retrieve_simple] Embedding returned no results above threshold, trying keyword")
+            except Exception as e:
+                logger.warning(f"[retrieve_simple] Embedding failed ({e}), falling back to keyword")
+
+        # Fallback: Keyword-based matching
         if not self.knowledge_base_dir.exists():
             return []
-        
-        md_files = list(self.knowledge_base_dir.rglob("*.md"))
-        if not md_files:
-            return []
-        
-        # Embedding-based similarity has been removed from retrieve_simple 
-        # to fix BUG-015 (high latency / quota usage).
-        # retrieve_simple is now purely a keyword-matching fallback.
-        
-        # 2. Fallback: Keyword-based matching (đảm bảo hoạt động kể cả khi API sập)
+
         import re
         query_words = set(re.findall(r"\w+", query.lower()))
         if not query_words:
             return []
-            
+
+        md_files = list(self.knowledge_base_dir.rglob("*.md"))
         results = []
         for md_file in md_files:
             try:
                 content = md_file.read_text(encoding="utf-8")
                 if not content.strip():
                     continue
-                
                 chunks = self._simple_chunk(content, self.chunk_size, self.chunk_overlap)
                 for chunk_idx, chunk in enumerate(chunks):
                     chunk_lower = chunk.lower()
@@ -313,7 +394,6 @@ class KnowledgeLookup:
                                 match_count += 2
                             else:
                                 match_count += 1
-                                
                     if match_count > 0:
                         score = match_count / (len(query_words) + 5)
                         file_name_lower = md_file.name.lower()
@@ -328,7 +408,7 @@ class KnowledgeLookup:
                         })
             except Exception as ex:
                 logger.warning(f"Keyword search failed for {md_file}: {ex}")
-                
+
         results.sort(key=lambda x: x["score"], reverse=True)
         return results[:k]
     
@@ -451,6 +531,10 @@ class KnowledgeLookup:
             logger.info(f"[KnowledgeLookup] RAG index ready ({self._loaded_doc_count} docs)")
         else:
             logger.warning("[KnowledgeLookup] RAG index build failed — will use fallback")
+        # Also pre-warm chunk cache for embedding-based retrieve_simple
+        await self._build_chunk_cache()
+        if self._chunk_cache_built:
+            logger.info(f"[KnowledgeLookup] Chunk cache ready ({len(self._chunk_cache)} chunks)")
 
 
 # ============ Builder helper ============

@@ -150,7 +150,9 @@ async def calc_rent(
                     if water_m3 == 0:
                         water_m3 = float(invoice['water_m3'] or 0)
                 else:
-                    return f"Không có dữ liệu hóa đơn cho phòng {room['room_number']} tháng {month}. Vui lòng cung cấp số điện nước để tính."
+                    # Bỏ qua lỗi và tính tạm tính nếu chưa có invoice
+                    electricity_kwh = electricity_kwh or 0
+                    water_m3 = water_m3 or 0
             
             # Tính tiền
             base_rent = float(room['monthly_rent'])
@@ -451,6 +453,15 @@ async def recommend_renewal(tenant_id: int) -> str:
             if "yên tĩnh" in concerns_text or "ồn ào" in concerns_text:
                 persona.append("QUIET")
                 
+            # If persona is empty (e.g. seed data profile), deduce from behavior
+            if not persona:
+                if payment_risk == "HIGH" or payment_risk == "MEDIUM":
+                    persona.append("PRICE_SENSITIVE")
+                if complaints >= 2:
+                    persona.append("SENSITIVE_TENANT")
+                if payment_risk == "LOW" and complaints == 0:
+                    persona.append("IDEAL_TENANT")
+
             if persona:
                 persona_match_score = 1.0
 

@@ -1,130 +1,102 @@
 # TroManager - Kiến Trúc Số 2: Router-Centric ReAct (Dual-Process)
 
 > Code base triển khai cho hệ thống quản lý nhà trọ thông minh **TroManager**, dựa trên kiến trúc **Router-Centric ReAct kết hợp Tiến trình kép (Dual-Process)**.
+> Trạng thái dự án: **HOÀN THÀNH 100% MODULE CỐT LÕI (PRODUCTION-READY)**.
 
 ---
 
-## 1. Tổng Quan
+## 1. Tổng Quan Kiến Trúc
 
-Kiến trúc này lấy cảm hứng từ **Lý thuyết nhận thức kép của Kahneman**:
+Kiến trúc này lấy cảm hứng từ **Lý thuyết nhận thức kép của Kahneman**, kết hợp với công nghệ định tuyến phân giải ý định (**LLM Intent Routing**):
 
-- **Hệ thống 1 (System 1 - Fast Layer)**: Phản ứng nhanh, chi phí thấp, xử lý các câu hỏi FAQ và tra cứu đơn giản. Dùng Gemini 3.0 Flash (bản flash) + Semantic Cache.
-- **Hệ thống 2 (System 2 - Slow Layer)**: Suy luận sâu, đa bước, dùng cho các tác vụ phức tạp. Dùng Gemini 3.0 Pro (bản pro) + ReAct loop + Tool Registry.
+- **Router Gateway**: Phân tích trực tiếp Intent bằng LLM (`gemma-4-26b-a4b-it`) để quyết định Request nên đi vào hệ thống nào (không dùng Regex lỗi thời).
+- **Hệ thống 1 (Fast Layer)**: Phản ứng nhanh, chi phí thấp, xử lý các câu hỏi FAQ và tra cứu đơn giản. Dùng `gemma-4-31b-it` + Semantic Cache.
+- **Hệ thống 2 (Slow Layer)**: Suy luận sâu, đa bước, dùng cho các tác vụ phức tạp (tài chính, khiếu nại, bảo trì). Dùng `gemini-3.1-flash-lite` + ReAct loop + Tool Registry + Human-in-the-loop Guardrails.
 
-Một **Router Gateway** ở đầu vào sẽ phân luồng request dựa trên từ khóa và nguồn gửi (User chat vs Cron event).
+---
 
-## 2. Tech Stack
+## 2. Công Nghệ Sử Dụng (Tech Stack)
 
-| Layer | Công nghệ |
-|-------|-----------|
-| Database | PostgreSQL 16 + pgvector extension |
-| LLM Fast | Gemini 3.0 Flash (bản flash) |
-| LLM Pro | Gemini 3.0 Pro (bản pro) |
-| Agent Framework | LangChain / LangGraph (ReAct) |
-| RAG Framework | LlamaIndex |
-| Embedding | nomic-embed-text (768 dim) |
-| Notification | Zalo OA API, SMS Gateway |
-| Language | Python 3.11+ |
+| Component | Công nghệ |
+|-----------|-----------|
+| **Database** | PostgreSQL 16 + pgvector extension (3072-dim vectors) |
+| **LLM Fast / Router** | `gemma-4-31b-it` (Fast), `gemma-4-26b-a4b-it` (Router) |
+| **LLM Pro** | `gemini-3.1-flash-lite` |
+| **Embedding** | `gemini-embedding-2` (3072 dims) |
+| **Agent Framework** | Custom ReAct Loop (thay vì LangGraph để tối ưu <100 tenants) |
+| **Notification** | Zalo OA API (Webhook), SMS Gateway |
+| **Language & Env** | Python 3.13, Conda, Uvicorn, FastAPI |
+
+---
 
 ## 3. Cấu Trúc Thư Mục
 
 ```
 TroManager_Architecture2/
 ├── README.md                       -- File này
+├── ROADMAP.md                      -- Lộ trình tương lai
 ├── docs/                           -- Tài liệu thiết kế chi tiết
-│   ├── 01_architecture_overview.md
-│   ├── 02_router_gateway_design.md
-│   ├── 03_system1_fast_layer.md
-│   ├── 04_system2_react_agent.md
-│   ├── 05_user_modeling_layer.md
-│   ├── 06_dynamic_tool_registry.md
-│   ├── 07_proactive_reminders.md
-│   └── 08_data_flow_and_diagrams.md
-├── database/                       -- Schema PostgreSQL
-│   ├── schema.sql
-│   ├── seed_data.sql
-│   └── README.md
+│   └── BUG_REPORT.md               -- Lịch sử xử lý lỗi
+├── database/                       -- Schema PostgreSQL & Data mẫu
 ├── src/                            -- Source code (Python)
-│   ├── gateway/                    -- Router Gateway
-│   ├── system1/                    -- System 1 Fast Layer
-│   ├── system2/                    -- System 2 ReAct Agent
-│   ├── user_modeling/              -- User Modeling Layer
+│   ├── gateway/                    -- LLM Intent Router
+│   ├── system1/                    -- Fast Layer (RAG)
+│   ├── system2/                    -- Slow Layer (ReAct Agent & Guardrails)
+│   ├── user_modeling/              -- Persona Optimizer & Behavior Tracking
 │   ├── tools/                      -- Dynamic Tool Registry
-│   ├── notifications/              -- Zalo/SMS clients
-│   ├── cron/                       -- Background event dispatcher
-│   └── main.py                     -- Entry point
-├── config/                         -- Cấu hình & prompt templates
-│   ├── config.yaml
-│   └── prompts/
-│       ├── system1_prompt.txt
-│       └── system2_prompt.txt
-├── tests/                          -- Test cases
-│   ├── test_router.py
-│   ├── test_system1_cache.py
-│   ├── test_react_loop.py
-│   └── test_proactive_event.py
-└── diagrams/                       -- Mermaid diagrams
-    ├── 01_architecture_overview.mmd
-    ├── 02_router_logic.mmd
-    ├── 03_react_loop.mmd
-    └── 04_proactive_event.mmd
+│   ├── cron/                       -- Background Jobs (Invoice, Contract, Birthday)
+│   └── main.py                     -- FastAPI Application
+├── config/                         -- Cấu hình hệ thống (YAML)
+├── tests/                          -- Bộ 220+ Test cases (100% Passed)
+└── diagrams/                       -- Biểu đồ luồng (Mermaid)
 ```
 
-## 4. Kiến Trúc Tổng Quan
+---
 
-```mermaid
-graph TD
-    User([Người dùng]) <-->|Chat| GW{Router Gateway}
-    Cron([Background Cron]) -->|Event JSON| Sys2[System 2]
-    GW -->|FAQ / Tra cứu đơn giản| Sys1[System 1: Fast Layer]
-    GW -->|Tool call / Suy luận| Sys2[System 2: ReAct Agent]
-    Sys1 <-->|Cosine Similarity| Cache[(Semantic Cache)]
-    Sys1 <-->|RAG| KB[(Knowledge Base)]
-    Sys2 <-->|Dynamic Tool Routing| Tools{Tool Registry}
-    Tools --> Decision[Decision Toolkit]
-    Tools --> Knowledge[Knowledge Toolkit]
-    Tools --> Automation[Automation Toolkit]
-    Sys2 <-->|Profile/Behavior/Vector| UML[(User Modeling Layer)]
-    Tools <-->|Query| UML
+## 4. Hướng Dẫn Cài Đặt Và Chạy Hệ Thống
+
+Để chạy hệ thống thực tế tại Local, làm theo các bước sau:
+
+### Bước 1: Khởi tạo Môi trường (Conda)
+Hệ thống yêu cầu Python 3.12 hoặc 3.13. Sử dụng Conda để quản lý môi trường:
+```bash
+conda create -n tromanager python=3.13
+conda activate tromanager
+pip install -r requirements.txt
 ```
 
-## 5. Luồng Xử Lý Chính
+### Bước 2: Thiết lập Biến Môi Trường (.env)
+Copy file `.env.example` thành `.env` và điền các thông tin bảo mật (Hệ thống tuyệt đối không dùng mock, bạn cần API Key thật):
+```bash
+cp .env.example .env
+```
+Mở file `.env` và cung cấp:
+- `GEMINI_API_KEY`: API Key để gọi Gemini/Gemma model.
+- `DB_PASSWORD`: Mật khẩu truy cập PostgreSQL.
 
-### 5.1. User Chat Flow
-1. User gửi tin nhắn → **Router Gateway**
-2. Gateway kiểm tra từ khóa nhạy cảm (`tiền`, `nợ`, `hợp đồng`, `chuyển phòng`, `hỏng`, `sửa`)
-3. Nếu match → **System 2**. Ngược lại → **System 1**
-4. System 1: Check cache → trả lời. Nếu không có → RAG → trả lời. Nếu confidence thấp → fallback sang System 2
-5. System 2: Inject context từ User Modeling → chạy ReAct loop (max 4 iterations) → trả lời
+### Bước 3: Khởi chạy Database
+Đảm bảo bạn đã cài đặt PostgreSQL 16 với pgvector. Hoặc chạy nhanh qua Docker Compose:
+```bash
+docker-compose up -d postgres
+```
+Sau đó, nạp dữ liệu mẫu và schema:
+```bash
+# Khởi tạo Schema và Dummy Data
+psql -h localhost -U postgres -d tromanager_db -f database/schema.sql
+psql -h localhost -U postgres -d tromanager_db -f database/seed_data.sql
+```
 
-### 5.2. Background Event Flow
-1. Cron Job phát hiện sự kiện (hóa đơn quá hạn, hợp đồng sắp hết...)
-2. Gửi event JSON trực tiếp vào **System 2**
-3. System 2 đọc profile, sinh thông báo cá nhân hóa
-4. Gọi `send_notification()` tool
-5. Ghi log vào `behavior_logs`
+### Bước 4: Kiểm tra nhanh (Smoke Test)
+Chạy kịch bản test để đảm bảo LLM và Database đã được nối dây thành công:
+```bash
+python scripts/run_smoke_test.py
+python scripts/test_real_llm.py
+```
 
-## 6. Bảo Mật & Guardrails
+### Bước 5: Khởi động Máy chủ FastAPI
+Khởi chạy hệ thống chính:
+```bash
+python -m uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+```
+Hệ thống đã sẵn sàng tại `http://localhost:8000`. Bạn có thể tương tác qua `/chat` endpoint hoặc chờ các Cron Job ngầm tự động kích hoạt.
 
-- **Decoupled Generation & Action**: LLM không trực tiếp thực hiện hành động tài chính, mà chỉ sinh draft cần con người duyệt
-- **Loop Breaker**: ReAct loop tối đa 4 lần, sau đó fallback message
-- **Dynamic Tool Loading**: Chỉ nạp tools cần thiết dựa trên intent
-- **JSON Schema Validation**: Mọi tool call phải khớp schema
-
-## 7. Liên Kết
-
-- Báo cáo kiến trúc tổng thể: `../BaoCao_DeXuat_KienTrucAI_TroManager.md`
-- Implementation plan: `../implementation_plan.md`
-- So sánh 3 kiến trúc: `../Architecture_Design/architecture_comparison.md`
-
-## 8. Trạng Thái
-
-| Module | Thiết kế | Code Stub | Test |
-|--------|----------|-----------|------|
-| Router Gateway | OK | OK | OK |
-| System 1 (Fast Layer) | OK | OK | OK |
-| System 2 (ReAct Agent) | OK | OK | OK |
-| User Modeling Layer | OK | OK | Pending |
-| Dynamic Tool Registry | OK | OK | Pending |
-| Proactive Reminders | OK | OK | OK |
-| Database Schema | OK | OK | Pending |

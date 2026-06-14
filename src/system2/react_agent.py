@@ -280,12 +280,12 @@ class ReActAgent:
                             else:
                                 # Check sensitive
                                 if self.guardrails.is_sensitive_tool(tc.get("name", "")):
-                                    tc = await self.guardrails.request_approval(
+                                    approval_res = await self.guardrails.request_approval(
                                         tc, request.tenant_id
                                     )
-                                    if tc.get("requires_approval"):
+                                    if approval_res.get("requires_approval"):
                                         observation = ToolMessage(
-                                            content=tc.get("approval_message", "Đang chờ duyệt"),
+                                            content=approval_res.get("approval_message", "Đang chờ duyệt"),
                                             tool_call_id=tc.get("id", ""),
                                             name=tc.get("name", ""),
                                         )
