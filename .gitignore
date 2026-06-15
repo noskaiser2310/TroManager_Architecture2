@@ -28,39 +28,9 @@ logs/
 # Database
 *.db
 *.sqlite
+database/pg_data/
 
 # Test coverage
-.coverage
-htmlcov/
-.pytest_cache/
-.mypy_cache/
-
-# OS
-.DS_Store
-Thumbs.db
-Desktop.ini
-
-# Custom Folders
-temp/
-scratch/
-
-# Build & Packaging
-build/
-dist/
-*.egg
-*.egg-info/
-wheels/
-*.whl
-
-# Virtual Environments
-.venv/
-venv/
-env/
-ENV/
-env.bak/
-venv.bak/
-
-# Testing & Coverage
 .coverage
 .coverage.*
 coverage.xml
@@ -70,8 +40,15 @@ htmlcov/
 .mypy_cache/
 .hypothesis/
 
-# Jupyter
-.ipynb_checkpoints/
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Custom
+temp/
+scratch/
+
 
 # Docker
 .docker/
@@ -83,16 +60,10 @@ docker-compose.override.yml
 secrets/
 .secret
 
-# Local database data
-database/pg_data/
-*.sqlite3
+# Jupyter
+.ipynb_checkpoints/
 
-# Local/Personal Project files
+# Local project files
 PROJECT_STATUS.md
-docs/
-diagrams/
-tests/
-pytest.ini
-ROADMAP.md
-techreport.tex
 TechReport.md
+techreport.tex

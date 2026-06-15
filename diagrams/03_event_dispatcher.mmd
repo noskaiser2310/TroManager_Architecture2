@@ -1,0 +1,44 @@
+sequenceDiagram
+    autonumber
+    actor Cron as Cron Job
+    participant Detector as Event Detector
+    participant DB as PostgreSQL
+    participant Dispatcher as Event Dispatcher
+    participant AntiSpam as Anti-Spam Guard<br/>max 2/week
+    participant GT as Golden Time Checker
+    participant S2 as System 2 Agent
+    participant Tools as Tool Registry
+    participant Queue as Approval Queue
+
+    Cron->>Detector: 09:00 AM trigger
+    Detector->>DB: SELECT v_overdue_invoices
+    DB-->>Detector: [tenant_id: 123, days_overdue: 3]
+    
+    loop For each event
+        Detector->>Dispatcher: dispatch(BackgroundEvent)
+        
+        Dispatcher->>AntiSpam: can_send(tenant, 'invoice_overdue')?
+        AntiSpam->>DB: count auto_* logs (7 days)
+        DB-->>AntiSpam: count=0
+        AntiSpam-->>Dispatcher: can_send=true
+        
+        Dispatcher->>GT: in_golden_hours(active_hours)?
+        GT-->>Dispatcher: Yes (09:00 in 'Morning, Evening')
+        
+        Dispatcher->>Tools: get_for_intent('background_event_invoice_overdue')
+        Tools-->>Dispatcher: [knowledge, automation] tools
+        
+        Dispatcher->>S2: run(ReActRequest)
+        Note over S2: ReAct Loop (max 4 iterations)
+        
+        S2->>Tools: get_invoice_detail(tenant_id, month)
+        Tools-->>S2: {amount: 3.5M, due: 2026-06-05}
+        
+        S2->>S2: Generate personalized message<br/>with tone from profile
+        
+        S2->>Tools: send_payment_reminder
+        Tools->>Queue: create_request(approval)
+        S2-->>Dispatcher: 'Request #42 awaiting approval'
+        
+        Dispatcher->>DB: INSERT behavior_log
+    end

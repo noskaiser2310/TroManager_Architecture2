@@ -1,0 +1,68 @@
+graph TB
+    User([End User<br/>Zalo/SMS/App]):::user
+    Cron([Background Cron]):::cron
+    
+    subgraph Entry["Entry Point"]
+        GW[Router Gateway<br/>gemma-4-26b-a4b-it]:::router
+    end
+    
+    subgraph S1["System 1 - Fast Layer"]
+        Cache[Semantic Cache<br/>Cosine > 0.9]:::db
+        RAG[Knowledge Base<br/>LlamaIndex<br/>18 .md files]:::db
+        Flash[gemma-4-31b-it<br/>Flash Model]:::llm
+    end
+    
+    subgraph S2["System 2 - Core ReAct Agent"]
+        Context[Context Builder<br/>Profile + Behavior + Memories]:::sys2
+        Loop[ReAct Loop<br/>max 4 iterations<br/>3 retries w/ backoff]:::sys2
+        Guard[Guardrails<br/>3 sensitive tools → Approval Queue]:::guard
+    end
+    
+    subgraph Tools["Dynamic Tool Registry"]
+        DT[Decision Toolkit<br/>5 tools]:::tool
+        KT[Knowledge Toolkit<br/>7 tools]:::tool
+        AT[Automation Toolkit<br/>6 tools]:::tool
+    end
+    
+    subgraph UML["User Modeling Layer"]
+        UP[(user_profiles)]:::db
+        BL[(behavior_logs)]:::db
+        UE[(user_embeddings)]:::db
+        CH[(conversation_history)]:::db
+    end
+    
+    subgraph Ext["External Services"]
+        Zalo[Zalo OA API<br/>HMAC-SHA256 verified]:::ext
+        SMS[SMS Gateway]:::ext
+    end
+    
+    User -->|Chat| GW
+    Cron -->|Event JSON| Loop
+    
+    GW -->|LLM says SYSTEM1| Cache
+    GW -->|Cache miss| RAG
+    GW -->|LLM says SYSTEM2| Loop
+    GW -->|source=cron or >500 chars| Loop
+    
+    Cache --> Flash
+    RAG --> Flash
+    Flash -->|Confidence < 0.7| Loop
+    
+    Loop --> Context
+    Context --> UP & BL & UE
+    
+    Loop --> DT & KT & AT
+    
+    AT --> Zalo & SMS & BL
+    
+    Loop --> Guard
+    
+    classDef user fill:#e1f5ff,stroke:#01579b
+    classDef cron fill:#fff9c4,stroke:#f57f17
+    classDef router fill:#ffcdd2,stroke:#c62828
+    classDef sys2 fill:#c8e6c9,stroke:#2e7d32
+    classDef llm fill:#d1c4e9,stroke:#4527a0
+    classDef db fill:#ffe0b2,stroke:#e65100
+    classDef tool fill:#b2dfdb,stroke:#004d40
+    classDef guard fill:#f8bbd0,stroke:#880e4f
+    classDef ext fill:#cfd8dc,stroke:#263238

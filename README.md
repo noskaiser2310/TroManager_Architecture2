@@ -1,102 +1,234 @@
-# TroManager - Kiến Trúc Số 2: Router-Centric ReAct (Dual-Process)
+# TroManager — AI-Powered Boarding House Management System
 
-> Code base triển khai cho hệ thống quản lý nhà trọ thông minh **TroManager**, dựa trên kiến trúc **Router-Centric ReAct kết hợp Tiến trình kép (Dual-Process)**.
-> Trạng thái dự án: **HOÀN THÀNH 100% MODULE CỐT LÕI (PRODUCTION-READY)**.
+[![Status](https://img.shields.io/badge/status-production--ready-22AA22)](https://github.com/anomalyco/TroManager)
+[![Python](https://img.shields.io/badge/python-3.13-blue)](#)
+[![PostgreSQL](https://img.shields.io/badge/postgresql-16-336791)](#)
+[![License](https://img.shields.io/badge/license-MIT-green)](#)
 
----
+A dual-process AI system for automating tenant communication, maintenance tracking, payment reminders, and personalization at scale. Uses **LLM Intent Routing** (Dual-Process Theory) to balance speed and reasoning cost.
 
-## 1. Tổng Quan Kiến Trúc
-
-Kiến trúc này lấy cảm hứng từ **Lý thuyết nhận thức kép của Kahneman**, kết hợp với công nghệ định tuyến phân giải ý định (**LLM Intent Routing**):
-
-- **Router Gateway**: Phân tích trực tiếp Intent bằng LLM (`gemma-4-26b-a4b-it`) để quyết định Request nên đi vào hệ thống nào (không dùng Regex lỗi thời).
-- **Hệ thống 1 (Fast Layer)**: Phản ứng nhanh, chi phí thấp, xử lý các câu hỏi FAQ và tra cứu đơn giản. Dùng `gemma-4-31b-it` + Semantic Cache.
-- **Hệ thống 2 (Slow Layer)**: Suy luận sâu, đa bước, dùng cho các tác vụ phức tạp (tài chính, khiếu nại, bảo trì). Dùng `gemini-3.1-flash-lite` + ReAct loop + Tool Registry + Human-in-the-loop Guardrails.
+> Built for Vietnamese boarding house owners managing <100 tenants. Handles Zalo/SMS/App channels with background cron jobs for proactive notifications.
 
 ---
 
-## 2. Công Nghệ Sử Dụng (Tech Stack)
+## Architecture
 
-| Component | Công nghệ |
+```mermaid
+graph TB
+    subgraph Input["Input Layer"]
+        REQ["Incoming Request<br/>(Zalo / SMS / App / Cron)"]
+    end
+
+    subgraph Router["Router Gateway"]
+        KF["Keyword Pre-filter<br/>99%+ simple queries"]
+        LLMR["LLM Intent Classifier<br/>(Flash Model)"]
+        KF -->|"no match"| LLMR
+    end
+
+    subgraph S1["System 1 — Fast Layer"]
+        SC["Semantic Cache<br/>(tenant-aware)"]
+        RAG["RAG Retrieval<br/>(91 chunks)"]
+        FLASH["Flash LLM<br/>(gemma-4-31b-it)"]
+        SC -->|"miss"| RAG --> FLASH
+    end
+
+    subgraph S2["System 2 — ReAct Agent"]
+        CTX["Context Builder<br/>(profile + memories)"]
+        REACT["ReAct Loop<br/>(max 4 iterations)"]
+        TOOLS["Tool Registry<br/>(20+ tools)"]
+        PRO["Pro LLM<br/>(gemini-3.1-flash-lite)"]
+        GR["Guardrails<br/>(financial approval)"]
+        CTX --> REACT
+        REACT <--> TOOLS
+        REACT --> PRO
+        PRO --> GR
+    end
+
+    subgraph Storage["Data Layer"]
+        PG[("PostgreSQL 16<br/>+ pgvector")]
+        MEM["Conversation Memory"]
+        BT["Behavior Tracker"]
+        PO["Persona Optimizer<br/>(5h debounce)"]
+    end
+
+    subgraph Cron["Background Jobs"]
+        INV["Invoice Overdue<br/>(daily 9am)"]
+        PAY["Payment Due Soon<br/>(daily 8am)"]
+        CTR["Contract Expiring<br/>(monthly)"]
+        BDAY["Birthday Greeting<br/>(daily 7am)"]
+        MTN["Maintenance Follow-up<br/>(weekly)"]
+    end
+
+    REQ --> Router
+    Router -->|"system1"| S1
+    Router -->|"system2"| S2
+    S1 -->|"fallback"| S2
+    S1 --> MEM
+    S2 --> MEM
+    MEM --> BT
+    BT --> PO
+    S1 --> PG
+    S2 --> PG
+    PO --> PG
+    Cron -->|"query views"| PG
+    Cron -->|"dispatch events"| S2
+```
+
+**Core principle**: Simple queries (greetings, policy lookups) go through a lightweight **System 1** with semantic caching. Complex queries (maintenance, billing, complaints) go through a **System 2** ReAct agent with tool access. A **keyword pre-filter** catches 99%+ of simple queries with zero LLM cost.
+
+---
+
+## Features
+
+- **Dual-Process Architecture**: Intelligent routing between fast (System 1) and deep (System 2) processing paths
+- **Tenant-Aware Semantic Cache**: Per-tenant caching prevents cross-tenant personalization leakage
+- **Debounced Persona Optimization**: 5-hour cooldown after last message; no daily batch costs
+- **Proactive Cron Jobs**: Overdue invoice reminders, payment due notifications, contract expiry alerts, birthday greetings, maintenance follow-ups
+- **Multi-Channel**: REST API + Zalo OA webhook (HMAC-verified) with rate limiting
+- **Tool Framework**: Dynamic tool registry with 20+ tools (maintenance tickets, room viewing, invoicing, profile management)
+- **Human-in-the-Loop**: Guardrails on financial/contract actions, approval queue
+- **Behavior Tracking**: Per-tenant behavior logs → personalization profiles → tailored AI responses
+- **LLM Key Rotation**: 10+ API keys with automatic rotation on quota exhaustion
+- **Observability**: Prometheus metrics endpoint, structured JSON logging, request-level tracing
+
+---
+
+## Tech Stack
+
+| Component | Technology |
 |-----------|-----------|
-| **Database** | PostgreSQL 16 + pgvector extension (3072-dim vectors) |
-| **LLM Fast / Router** | `gemma-4-31b-it` (Fast), `gemma-4-26b-a4b-it` (Router) |
-| **LLM Pro** | `gemini-3.1-flash-lite` |
+| **Runtime** | Python 3.13, FastAPI, Uvicorn |
+| **Database** | PostgreSQL 16 + pgvector (3072-dim) |
+| **LLM (Fast/Router)** | `gemma-4-31b-it` / `gemma-4-26b-a4b-it` via Gemini API |
+| **LLM (Pro)** | `gemini-3.1-flash-lite` |
 | **Embedding** | `gemini-embedding-2` (3072 dims) |
-| **Agent Framework** | Custom ReAct Loop (thay vì LangGraph để tối ưu <100 tenants) |
-| **Notification** | Zalo OA API (Webhook), SMS Gateway |
-| **Language & Env** | Python 3.13, Conda, Uvicorn, FastAPI |
+| **Agent Loop** | Custom ReAct (no LangGraph dependency) |
+| **Scheduler** | APScheduler (async) |
+| **Notification** | Zalo OA (webhook) + SMS gateway |
+| **Deployment** | Docker Compose (app + DB + migrations) |
+| **Container** | Python 3.13-slim (multi-stage build) |
 
 ---
 
-## 3. Cấu Trúc Thư Mục
+## Quick Start
 
-```
-TroManager_Architecture2/
-├── README.md                       -- File này
-├── ROADMAP.md                      -- Lộ trình tương lai
-├── docs/                           -- Tài liệu thiết kế chi tiết
-│   └── BUG_REPORT.md               -- Lịch sử xử lý lỗi
-├── database/                       -- Schema PostgreSQL & Data mẫu
-├── src/                            -- Source code (Python)
-│   ├── gateway/                    -- LLM Intent Router
-│   ├── system1/                    -- Fast Layer (RAG)
-│   ├── system2/                    -- Slow Layer (ReAct Agent & Guardrails)
-│   ├── user_modeling/              -- Persona Optimizer & Behavior Tracking
-│   ├── tools/                      -- Dynamic Tool Registry
-│   ├── cron/                       -- Background Jobs (Invoice, Contract, Birthday)
-│   └── main.py                     -- FastAPI Application
-├── config/                         -- Cấu hình hệ thống (YAML)
-├── tests/                          -- Bộ 220+ Test cases (100% Passed)
-└── diagrams/                       -- Biểu đồ luồng (Mermaid)
-```
+### Prerequisites
 
----
+- Docker & Docker Compose
+- Google Gemini API key(s) with access to `gemini-3.1-flash-lite` and `gemma-4-31b-it`
 
-## 4. Hướng Dẫn Cài Đặt Và Chạy Hệ Thống
+### Setup
 
-Để chạy hệ thống thực tế tại Local, làm theo các bước sau:
-
-### Bước 1: Khởi tạo Môi trường (Conda)
-Hệ thống yêu cầu Python 3.12 hoặc 3.13. Sử dụng Conda để quản lý môi trường:
 ```bash
-conda create -n tromanager python=3.13
-conda activate tromanager
-pip install -r requirements.txt
-```
-
-### Bước 2: Thiết lập Biến Môi Trường (.env)
-Copy file `.env.example` thành `.env` và điền các thông tin bảo mật (Hệ thống tuyệt đối không dùng mock, bạn cần API Key thật):
-```bash
+# 1. Clone and configure
 cp .env.example .env
-```
-Mở file `.env` và cung cấp:
-- `GEMINI_API_KEY`: API Key để gọi Gemini/Gemma model.
-- `DB_PASSWORD`: Mật khẩu truy cập PostgreSQL.
+# Edit .env: GEMINI_API_KEY, DB_PASSWORD
 
-### Bước 3: Khởi chạy Database
-Đảm bảo bạn đã cài đặt PostgreSQL 16 với pgvector. Hoặc chạy nhanh qua Docker Compose:
-```bash
-docker-compose up -d postgres
-```
-Sau đó, nạp dữ liệu mẫu và schema:
-```bash
-# Khởi tạo Schema và Dummy Data
-psql -h localhost -U postgres -d tromanager_db -f database/schema.sql
-psql -h localhost -U postgres -d tromanager_db -f database/seed_data.sql
+# 2. Start everything
+docker compose up -d
+
+# 3. Verify
+curl http://localhost:8000/health
+# {"status":"ok","db":true,"llm":true,"rate_limiter":true}
+
+# 4. Send a test message
+curl -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"tenant_id":1,"message":"Chào bạn","source":"zalo","session_id":"test-001"}'
 ```
 
-### Bước 4: Kiểm tra nhanh (Smoke Test)
-Chạy kịch bản test để đảm bảo LLM và Database đã được nối dây thành công:
-```bash
-python scripts/run_smoke_test.py
-python scripts/test_real_llm.py
+The system starts with seed data (5 tenants, sample invoices, contracts, rooms) and runs migrations automatically.
+
+---
+
+## Project Structure
+
+```
+├── src/
+│   ├── gateway/            LLM Intent Router + keyword pre-filter
+│   ├── system1/            Fast Layer (semantic cache, RAG, flash LLM)
+│   ├── system2/            ReAct Agent (tool loop, guardrails, context builder)
+│   ├── user_modeling/      Persona Optimizer, Behavior Tracker, Conversation Memory
+│   ├── tools/              Dynamic Tool Registry (20+ tools)
+│   ├── cron/               Background job scheduler + event dispatcher
+│   ├── llm/                LLM client with key rotation, config loader
+│   ├── notifications/      Zalo/SMS provider, metrics
+│   └── main.py             FastAPI application entry point
+├── database/
+│   ├── schema.sql          Full PostgreSQL schema
+│   ├── seed_data.sql       Sample data (5 tenants, invoices, contracts, etc.)
+│   └── migrations/         Versioned migrations (001–004)
+├── config/
+│   ├── config.yaml         System configuration
+│   └── prompts/            System 1 & System 2 prompt templates
+├── tests/e2e/scenarios/    40+ multi-turn test scenarios
+└── knowledge_base/         RAG document corpus (Vietnamese)
 ```
 
-### Bước 5: Khởi động Máy chủ FastAPI
-Khởi chạy hệ thống chính:
-```bash
-python -m uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
-```
-Hệ thống đã sẵn sàng tại `http://localhost:8000`. Bạn có thể tương tác qua `/chat` endpoint hoặc chờ các Cron Job ngầm tự động kích hoạt.
+---
 
+## API Reference
+
+### `POST /chat`
+Primary chat endpoint. Accepts text from any channel.
+
+```json
+{
+  "source": "zalo|sms|app|api",
+  "tenant_id": 1,
+  "message": "Tôi muốn báo hỏng bóng đèn phòng 101",
+  "session_id": "uuid"
+}
+```
+
+### `POST /webhook/zalo`
+Zalo OA webhook with HMAC-SHA256 signature verification.
+
+### `GET /health`
+Health check returning DB, LLM, and rate limiter status.
+
+### `GET /metrics`
+Prometheus metrics endpoint.
+
+---
+
+## Architectural Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| **Keyword pre-filter before LLM router** | 99%+ of simple queries (greetings, thanks) routed at zero LLM cost; saves 500+ API calls/day on free tier |
+| **Debounced persona optimization** | Per-tenant 5h cooldown replaces daily batch — saves ~80% token cost vs processing all tenants daily |
+| **Tenant-aware semantic cache** | Prevents cache poisoning where tenant A receives tenant B's personalized greeting; each tenant gets correct name/context |
+| **Custom ReAct vs LangGraph** | Avoids dependency overhead for <100 tenant scale; full control over loop, retries, and tool execution |
+| **APScheduler for cron jobs** | In-process async scheduler avoids Redis/Sidekiq complexity at current scale; easy to extract later if needed |
+| **LLM key rotation** | 10+ API keys with automatic rotation handles Gemini free-tier 500 req/day limit gracefully |
+
+---
+
+## Testing
+
+```bash
+# Full E2E test suite (40+ scenarios, multi-turn)
+python -X utf8 -m pytest tests/ -v
+
+# Single scenario
+python -X utf8 -m tests.e2e.scenarios.test_existing_02
+
+# With detailed logging
+python -X utf8 -m pytest tests/ -v --log-cli-level=INFO
+```
+
+---
+
+## Documentation
+
+- `ROADMAP.md` — Future development phases and priorities
+- `docs/BUG_REPORT.md` — Bug history and resolutions
+- `database/README.md` — Schema documentation
+- `/health` endpoint — Real-time system status
+
+---
+
+## License
+
+MIT

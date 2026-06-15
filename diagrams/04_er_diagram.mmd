@@ -1,0 +1,17 @@
+erDiagram
+    USER_PROFILES ||--o{ CONTRACTS : "has"
+    USER_PROFILES ||--o{ INVOICES : "owes"
+    USER_PROFILES ||--o{ PAYMENTS : "pays"
+    USER_PROFILES ||--o{ BEHAVIOR_LOGS : "generates"
+    USER_PROFILES ||--o{ USER_EMBEDDINGS : "has memories"
+    USER_PROFILES ||--o{ MAINTENANCE_TICKETS : "requests"
+    USER_PROFILES ||--o{ CONVERSATION_HISTORY : "chats"
+    USER_PROFILES ||--o{ APPOINTMENTS : "schedules"
+    
+    ROOMS ||--o{ CONTRACTS : "rented as"
+    ROOMS ||--o{ INVOICES : "billed to"
+    ROOMS ||--o{ MAINTENANCE_TICKETS : "has issues"
+    ROOMS ||--o{ APPOINTMENTS : "shown at"
+    
+    INVOICES ||--o{ PAYMENTS : "settled by"
+    CONTRACTS ||--o{ INVOICES : "generates"

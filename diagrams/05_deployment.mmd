@@ -1,0 +1,43 @@
+graph TB
+    subgraph Client["Client Layer"]
+        ZaloApp[Zalo App]
+        SMSApp[SMS]
+        WebApp[Web App]
+    end
+    
+    subgraph Edge["Edge / Load Balancer"]
+        LB[Nginx<br/>SSL Termination]
+    end
+    
+    subgraph App["Application Servers"]
+        API1[FastAPI Instance 1]
+        API2[FastAPI Instance 2]
+    end
+    
+    subgraph Workers["Background Workers"]
+        Worker1[Cron Worker<br/>APScheduler]
+    end
+    
+    subgraph Data["Data Layer"]
+        PG[(PostgreSQL 16<br/>+ pgvector)]
+    end
+    
+    subgraph External["External APIs"]
+        Gemini[Google Gemini API<br/>OpenAI-compatible]
+        ZaloAPI[Zalo OA API]
+    end
+    
+    ZaloApp & SMSApp & WebApp -->|HTTPS| LB
+    
+    LB --> API1 & API2
+    
+    API1 & API2 --> PG
+    Worker1 --> PG
+    
+    API1 & API2 --> Gemini & ZaloAPI
+    
+    classDef lb fill:#ffcdd2,stroke:#c62828
+    classDef api fill:#c8e6c9,stroke:#2e7d32
+    classDef db fill:#ffe0b2,stroke:#e65100
+    classDef ext fill:#cfd8dc,stroke:#263238
+    classDef worker fill:#e1bee7,stroke:#4a148c
