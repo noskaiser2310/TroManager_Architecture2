@@ -160,18 +160,49 @@ Simple queries (greetings, policy lookups, FAQs) are handled by System 1 with se
 
 ## API Reference
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/chat` | Primary chat endpoint. Accepts `source`, `tenant_id`, `message`, `session_id`. |
-| `POST` | `/webhook/zalo` | Zalo OA webhook with HMAC-SHA256 signature verification. |
-| `GET` | `/health` | System health — returns DB, LLM, and rate limiter status. |
-| `GET` | `/metrics` | Prometheus metrics for observability. |
+### Chat & Core
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/chat` | — | Primary chat endpoint. Accepts `source`, `tenant_id`, `message`, `session_id`. |
+| `GET` | `/health` | — | System health — DB, LLM, and rate limiter status. |
+| `GET` | `/metrics` | — | Prometheus metrics for observability. |
+
+### Admin — Approval Queue
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/admin/approvals` | `X-Admin-Key` | List pending approvals (financial/contract actions). |
+| `GET` | `/admin/approvals/{id}` | `X-Admin-Key` | Get single approval detail. |
+| `POST` | `/admin/approvals/{id}/approve` | `X-Admin-Key` | Approve a pending action. |
+| `POST` | `/admin/approvals/{id}/reject` | `X-Admin-Key` | Reject a pending action. |
+
+### Admin — Appointments
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/admin/appointments` | `X-Admin-Key` | List room viewing appointments. |
+| `POST` | `/admin/appointments/{id}/update` | `X-Admin-Key` | Update appointment status (confirmed/cancelled/completed). |
+
+### Admin — Knowledge Base
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/admin/knowledge/stats` | `X-Admin-Key` | RAG corpus statistics (chunk count, sources). |
+| `POST` | `/admin/knowledge/reload` | `X-Admin-Key` | Reload RAG index from disk. |
+
+### Admin — Rate Limiting
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/admin/rate-limit/stats/{key}` | `X-Admin-Key` | Get rate limit stats for a key. |
+| `POST` | `/admin/rate-limit/reset/{key}` | `X-Admin-Key` | Reset rate limiter for a key. |
 
 ### Example: `POST /chat`
 
 ```json
 {
-  "source": "zalo",
+  "source": "app",
   "tenant_id": 1,
   "message": "Tôi muốn báo hỏng bóng đèn phòng 101",
   "session_id": "550e8400-e29b-41d4-a716-446655440000"
@@ -186,8 +217,6 @@ Simple queries (greetings, policy lookups, FAQs) are handled by System 1 with se
 | `GEMINI_API_KEY_1..9` | No | Additional keys for rotation on quota exhaustion |
 | `DB_PASSWORD` | Yes | PostgreSQL password |
 | `SECRET_KEY` | Yes | JWT and session signing key |
-| `ZALO_OA_APP_ID` | No | Zalo OA app credentials |
-| `ZALO_OA_SECRET_KEY` | No | Zalo OA secret for webhook verification |
 
 ---
 

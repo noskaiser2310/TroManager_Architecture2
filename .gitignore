@@ -65,5 +65,11 @@ secrets/
 
 # Local project files
 PROJECT_STATUS.md
+ROADMAP.md
 TechReport.md
+TechReport.pdf
 techreport.tex
+techreport.aux
+techreport.log
+techreport.out
+techreport.toc
