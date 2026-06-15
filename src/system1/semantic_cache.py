@@ -39,16 +39,11 @@ class SemanticCache:
         self,
         query_embedding: list[float],
         threshold: float = 0.9,
+        tenant_id: int | None = None,
     ) -> CacheEntry | None:
         """
         Tìm cache entry có similarity cao nhất.
-        
-        Args:
-            query_embedding: Vector 768-dim
-            threshold: Minimum similarity (0-1)
-            
-        Returns:
-            CacheEntry nếu tìm thấy, None nếu không
+        tenant_id để tránh cache nhầm giữa các tenant (response cá nhân hóa).
         """
         embedding_str = self._to_pgvector(query_embedding)
         
@@ -61,15 +56,15 @@ class SemanticCache:
         FROM semantic_cache
         WHERE 1 - (query_embedding <=> $1::vector) > $2
           AND expires_at > CURRENT_TIMESTAMP
+          AND (tenant_id IS NULL OR tenant_id = $3)
         ORDER BY query_embedding <=> $1::vector
         LIMIT 1
         """
         
         async with self.db.acquire() as conn:
-            row = await conn.fetchrow(sql, embedding_str, threshold)
+            row = await conn.fetchrow(sql, embedding_str, threshold, tenant_id)
             
             if row:
-                # Update hit count và last_accessed
                 await self._update_access(row["cache_id"])
                 return CacheEntry(
                     cache_id=row["cache_id"],
@@ -85,24 +80,24 @@ class SemanticCache:
         query: str,
         query_embedding: list[float],
         response: str,
+        tenant_id: int | None = None,
     ) -> int:
         """
         Lưu cache entry mới.
-        
-        Returns:
-            cache_id của entry mới tạo
+        tenant_id = None → generic response (ai cũng dùng được).
+        tenant_id != None → only cho tenant đó.
         """
         embedding_str = self._to_pgvector(query_embedding)
         
         sql = """
-        INSERT INTO semantic_cache (query_text, query_embedding, response_text)
-        VALUES ($1, $2::vector, $3)
+        INSERT INTO semantic_cache (query_text, query_embedding, response_text, tenant_id)
+        VALUES ($1, $2::vector, $3, $4)
         ON CONFLICT DO NOTHING
         RETURNING cache_id
         """
         
         async with self.db.acquire() as conn:
-            row = await conn.fetchrow(sql, query, embedding_str, response)
+            row = await conn.fetchrow(sql, query, embedding_str, response, tenant_id)
             if row:
                 logger.debug(f"Saved cache entry {row['cache_id']}: {query[:50]}")
                 return row["cache_id"]
@@ -162,5 +157,5 @@ async def warm_cache_with_faq(cache: SemanticCache, faqs: list[dict], embedding_
     logger.info(f"Warming cache with {len(faqs)} FAQs...")
     for faq in faqs:
         embedding = await embedding_model.encode(faq["query"])
-        await cache.save(faq["query"], embedding, faq["response"])
+        await cache.save(faq["query"], embedding, faq["response"], tenant_id=None)
     logger.info("Cache warming complete")

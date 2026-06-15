@@ -141,7 +141,7 @@ class CronScheduler:
 
         logger.info("Scheduled jobs configured")
 
-    def schedule_persona_update(self, tenant_id: int, delay_seconds: int = 18000):
+    def schedule_persona_update(self, tenant_id: int, delay_seconds: int = 18000):  # 18000s = 5h
         """
         Schedule persona optimization for a tenant after a cooldown period.
         

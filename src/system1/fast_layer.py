@@ -115,11 +115,12 @@ class FastLayer:
             if request.tenant_id:
                 profile = await self.profiles.get_profile(request.tenant_id)
             
-            # Step 3: Cache lookup
+            # Step 3: Cache lookup (tenant-aware: tránh cache nhầm cá nhân hóa)
             if query_embedding is not None and not request.skip_cache:
                 cached = await self.cache.lookup(
                     query_embedding,
                     threshold=self.cache_threshold,
+                    tenant_id=request.tenant_id,
                 )
                 if cached:
                     self.metrics.cache_hits += 1
@@ -183,12 +184,13 @@ class FastLayer:
                     fallback_reason="low_confidence",
                 )
             
-            # Step 7: Save to cache (async, don't block)
+            # Step 7: Save to cache với tenant_id để tránh cache nhầm cá nhân hóa
             if response["confidence"] > 0.85 and query_embedding is not None:
                 await self.cache.save(
                     query=request.query,
                     query_embedding=query_embedding,
                     response=response["answer"],
+                    tenant_id=request.tenant_id,
                 )
             
             self.metrics.rag_responses += 1

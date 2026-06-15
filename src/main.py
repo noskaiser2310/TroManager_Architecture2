@@ -790,7 +790,7 @@ async def _process_chat(request: ChatRequest, session_id: str) -> ChatResponse:
 
     # Schedule persona optimization 5h after last message (per-tenant, tiết kiệm token)
     if container.cron_scheduler and request.tenant_id:
-        container.cron_scheduler.schedule_persona_update(request.tenant_id, delay_seconds=30)
+        container.cron_scheduler.schedule_persona_update(request.tenant_id, delay_seconds=18000)
 
     return ChatResponse(
         answer=response_answer,
