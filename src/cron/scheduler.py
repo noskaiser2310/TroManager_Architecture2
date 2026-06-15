@@ -59,6 +59,7 @@ class CronScheduler:
         self.conversation_memory = conversation_memory
         self.persona_optimizer = persona_optimizer
         self.scheduler = AsyncIOScheduler()
+        self._pending_persona: dict[int, asyncio.Task] = {}
         self._setup_jobs()
 
     def _setup_jobs(self):
@@ -122,20 +123,9 @@ class CronScheduler:
             replace_existing=True,
         )
 
-        # Persona Optimizer - daily 23:00 (cuối ngày tổng hợp behavior thành memories)
-        if self.profile_service and self.behavior_tracker and self.memory_manager and self.llm_client:
-            self.scheduler.add_job(
-                self._persona_optimizer_daily,
-                CronTrigger(hour=23, minute=0),
-                id="persona_optimizer_daily",
-                replace_existing=True,
-            )
-            logger.info("Persona Optimizer job enabled")
-        else:
-            logger.warning(
-                "Persona Optimizer job disabled (missing profile_service/behavior_tracker/"
-                "memory_manager/llm_client)"
-            )
+        # Persona Optimizer - KHÔNG chạy daily batch (tốn token).
+        # Chỉ trigger per-tenant sau 5h kể từ tin nhắn cuối.
+        # Xem schedule_persona_update() để biết chi tiết.
 
         # Conversation cleanup - daily 02:00 (xóa turn cũ hơn 30 ngày)
         if self.conversation_memory:
@@ -150,6 +140,34 @@ class CronScheduler:
             logger.warning("Conversation cleanup job disabled (missing conversation_memory)")
 
         logger.info("Scheduled jobs configured")
+
+    def schedule_persona_update(self, tenant_id: int, delay_seconds: int = 18000):
+        """
+        Schedule persona optimization for a tenant after a cooldown period.
+        
+        Hủy lịch cũ nếu có, đặt lịch mới sau delay_seconds kể từ tin nhắn cuối.
+        Mặc định 18000s = 5h. Chỉ optimize tenant cụ thể để tiết kiệm token.
+        """
+        existing = self._pending_persona.pop(tenant_id, None)
+        if existing and not existing.done():
+            existing.cancel()
+            logger.info(f"[Persona] Cancelled pending update for tenant {tenant_id} (new message)")
+
+        async def _delayed_optimize():
+            try:
+                await asyncio.sleep(delay_seconds)
+                logger.info(f"[Persona] Running delayed optimization for tenant {tenant_id}")
+                if self.persona_optimizer:
+                    await self.persona_optimizer.optimize_tenant_profile(tenant_id)
+            except asyncio.CancelledError:
+                logger.info(f"[Persona] Delayed update cancelled for tenant {tenant_id} (new message arrived)")
+            except Exception as e:
+                logger.warning(f"[Persona] Delayed update failed for tenant {tenant_id}: {e}")
+            finally:
+                self._pending_persona.pop(tenant_id, None)
+
+        self._pending_persona[tenant_id] = asyncio.create_task(_delayed_optimize())
+        logger.info(f"[Persona] Scheduled update for tenant {tenant_id} in {delay_seconds}s")
 
     def start(self):
         """Start scheduler."""

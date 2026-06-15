@@ -26,19 +26,20 @@ Khách muốn thuê cùng bạn, cần phòng đủ rộng cho 2 người. Phòn
 - Trả về: Chính sách ở ghép, phòng 202 phù hợp, hướng dẫn thủ tục
 
 
-
-
 ---
 
 ## Kết quả hội thoại thực tế
-*Chạy lúc: 2026-06-15 00:41:33*
+*Chạy lúc: 2026-06-15 09:30:27*
 
 **Turn 1**
 - **Câu hỏi**: "Chào anh chị, em với bạn em định thuê chung một phòng. Bên mình có cho thuê 2 người ở chung một phòng không ạ? Bọn em cần phòng hơi rộng rộng tí, thấy phòng 202 có 28m², ban công rộng, giá 4tr có vẻ ok. Có bị tính thêm phí người không ạ? Và mình có thể xem phòng được không?"
-- **Câu trả lời của AI**: Chào bạn, cảm ơn bạn đã quan tâm đến phòng tại tòa nhà. Mình xin giải đáp các thắc mắc của bạn như sau:
+- **Câu trả lời của AI**: Chào bạn, cảm ơn bạn đã quan tâm đến phòng tại nhà trọ của chúng mình.
 
-1. **Về việc ở 2 người:** Theo thông tin từ hệ thống, phòng 202 hiện có quy định **số người tối đa là 1 người**. Do đó, phòng này không phù hợp để ở 2 người.
-2. **Về việc xem phòng:** Bạn hoàn toàn có thể qua xem phòng trực tiếp. Địa chỉ tòa nhà tại 123 Đường Tôn Đức Thắng, Quận Đống Đa, Hà Nội.
+Về các thắc mắc của bạn, mình xin được giải đáp như sau:
 
-Để hỗ trợ bạn tốt hơn, bạn có muốn mình tìm danh sách các phòng khác có diện tích rộng hơn hoặc cho phép ở 2 người không? Nếu có, bạn vui lòng cho mình biết ngân sách tối đa dự kiến của hai bạn nhé.
+1. **Về việc ở ghép:** Theo thông tin hệ thống, phòng 202 hiện được quy định số người tối đa là 1 người. Do đó, phòng này không phù hợp để ở 2 người.
+2. **Về phí người ở chung:** Hiện tại, chính sách của tòa nhà quy định số người tối đa cho từng phòng. Việc ở quá số người quy định là không đúng nội quy.
+3. **Về việc xem phòng:** Bạn hoàn toàn có thể qua xem phòng trực tiếp. Để thuận tiện, bạn vui lòng cho mình biết thời gian cụ thể (ngày, giờ) bạn muốn đến, mình sẽ hỗ trợ đặt lịch hẹn cho bạn nhé.
+
+Nếu bạn cần tìm phòng có diện tích rộng hơn cho 2 người ở, hãy cho mình biết ngân sách dự kiến, mình sẽ hỗ trợ tìm các phòng phù hợp hơn cho bạn và bạn của bạn.
 

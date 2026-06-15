@@ -173,9 +173,15 @@ class ConversationMemory:
         self,
         tenant_id: int,
         max_turns: int = 5,
+        max_chars: int = 8000,
     ) -> str:
         """
         Format các turn gần nhất thành text để inject vào LLM system prompt.
+
+        Args:
+            tenant_id: ID khách thuê
+            max_turns: số turn tối đa
+            max_chars: tổng độ dài tối đa (mặc định 8000 ký tự)
 
         Returns:
             Chuỗi text hoặc "" nếu không có history.
@@ -185,17 +191,19 @@ class ConversationMemory:
             return ""
 
         lines = ["LỊCH SỬ HỘI THOẠI GẦN ĐÂY (để tham khảo ngữ cảnh):"]
+        total_len = len(lines[0])
         for turn in turns:
             ts = turn.timestamp.strftime("%Y-%m-%d %H:%M")
-            lines.append(f"\n[{ts}]")
             user_msg = turn.user_message.strip()
-            if len(user_msg) > 200:
-                user_msg = user_msg[:200] + "..."
-            lines.append(f"Khách: {user_msg}")
             ai_msg = turn.ai_response.strip()
-            if len(ai_msg) > 200:
-                ai_msg = ai_msg[:200] + "..."
-            lines.append(f"AI: {ai_msg}")
+            turn_text = f"\n[{ts}]\nKhách: {user_msg}\nAI: {ai_msg}"
+            if total_len + len(turn_text) > max_chars:
+                remaining = max_chars - total_len
+                if remaining > 50:
+                    lines.append(turn_text[:remaining] + "...")
+                break
+            lines.append(turn_text)
+            total_len += len(turn_text)
         return "\n".join(lines)
 
     async def cleanup_old(self, days: int = 30) -> int:

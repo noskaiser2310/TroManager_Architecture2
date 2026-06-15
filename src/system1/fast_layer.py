@@ -68,9 +68,10 @@ class FastLayer:
         self.llm = llm_client
         self.embedding = embedding_model
         
-        self.confidence_threshold = config.get("confidence_threshold", 0.7)
+        self.confidence_threshold = config.get("confidence_threshold", 0.4)
         self.cache_threshold = config.get("cache_similarity_threshold", 0.9)
         self.rag_top_k = config.get("rag_top_k", 3)
+        self.timeout = config.get("llm_timeout_seconds", 5.0)
         
         self.metrics = System1Metrics()
 

@@ -213,7 +213,7 @@ class EmbeddingClient:
             return []
         
         batch_size = self.config.embedding.extra.get("batch_size", 5)
-        batch_delay = float(self.config.embedding.extra.get("batch_delay", 4.0))
+        batch_delay = float(self.config.embedding.extra.get("batch_delay", 0.0))
         all_vectors: list[list[float]] = []
         
         from openai import RateLimitError

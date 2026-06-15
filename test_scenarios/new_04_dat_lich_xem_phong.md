@@ -26,18 +26,16 @@ Khách đã xem ảnh phòng trên web và ưng phòng 303. Muốn đặt lịch
 - Trả về: Xác nhận lịch hẹn, địa chỉ, số điện thoại liên hệ khi đến
 
 
-
-
 ---
 
 ## Kết quả hội thoại thực tế
-*Chạy lúc: 2026-06-15 00:40:54*
+*Chạy lúc: 2026-06-15 09:29:59*
 
 **Turn 1**
 - **Câu hỏi**: "Em chào anh chị. Em có xem phòng 303 trên web và thấy cũng ưng. Cuối tuần này em rảnh Chủ Nhật, không biết bên mình có thể sắp xếp cho em qua xem phòng được không ạ? Khoảng 10h sáng em qua được. Em ở gần đó nên đi lại cũng tiện."
 - **Câu trả lời của AI**: Chào bạn, cảm ơn bạn đã quan tâm đến phòng 303 tại nhà trọ của chúng tôi.
 
-Tôi đã kiểm tra thông tin, phòng 303 hiện đang trống. Tôi rất vui lòng sắp xếp lịch hẹn để bạn qua xem phòng vào **10:00 sáng Chủ Nhật, ngày 21/06/2026** như bạn mong muốn.
+Hiện tại phòng 303 vẫn đang trống. Tôi đã ghi nhận lịch hẹn xem phòng của bạn vào **10:00 sáng Chủ Nhật (ngày 21/06/2026)**.
 
-Để hoàn tất việc đặt lịch, bạn vui lòng cung cấp cho tôi **họ tên và số điện thoại liên hệ** của bạn nhé. Sau khi nhận được thông tin, tôi sẽ xác nhận lịch hẹn chính thức với bạn.
+Để hoàn tất việc đặt lịch, bạn vui lòng cung cấp cho tôi **họ tên** và **số điện thoại liên lạc** của bạn nhé. Khi đến nơi, bạn có thể liên hệ trực tiếp với tôi để được dẫn đi xem phòng ạ.
 

@@ -151,36 +151,36 @@ async def send_sms(tenant_id: int, message: str) -> str:
 # ============ Tool 3: create_maintenance_ticket ============
 
 class CreateMaintenanceTicketInput(BaseModel):
-    tenant_id: int = Field(..., description="ID khách thuê")
     issue: str = Field(..., description="Mô tả sự cố")
-    priority: str = Field("normal", description="low, normal, high, urgent")
-    category: str = Field("general", description="electrical, plumbing, appliance, ... ")
-    room_id: Optional[int] = Field(None, description="ID phòng (mặc định lấy từ tenant)")
+    priority: str = Field("normal", description="'urgent': chập/cháy/ngập/vỡ ống — 'high': hỏng ảnh hưởng sinh hoạt — 'normal': bảo trì/hỏng nhẹ — 'low': đề xuất/cải thiện")
+    category: str = Field("general", description="Phân loại: electrical (điện), plumbing (nước), appliance (máy lạnh/tủ lạnh/bình nóng lạnh), internet (wifi/mạng), door_lock (cửa/khóa), structure (thấm/dột/nứt), general (khác)")
 
 
 @tool(args_schema=CreateMaintenanceTicketInput)
 async def create_maintenance_ticket(
-    tenant_id: int,
     issue: str,
     priority: str = "normal",
     category: str = "general",
-    room_id: Optional[int] = None,
 ) -> str:
     """
     Tạo phiếu yêu cầu sửa chữa/bảo trì trong database.
+    Gọi tool NÀY NGAY khi khách báo bất kỳ sự cố nào, KHÔNG hỏi thêm.
+    Tenant ID và phòng tự động lấy từ context hệ thống.
+    Bạn tự quyết định category và priority dựa trên nội dung issue.
     """
-    from ..core import get_db_pool
+    from ..core import get_db_pool, current_tenant_id
     
     try:
+        tenant_id = current_tenant_id.get()
+        if not tenant_id:
+            return "Không xác định được thông tin khách thuê."
+        
         pool = get_db_pool()
         async with pool.acquire() as conn:
-            # Lấy room_id nếu không có
-            if room_id is None:
-                room_id = await conn.fetchval(
-                    "SELECT room_id FROM user_profiles WHERE tenant_id = $1",
-                    tenant_id
-                )
-            
+            room_id = await conn.fetchval(
+                "SELECT room_id FROM user_profiles WHERE tenant_id = $1",
+                tenant_id
+            )
             if not room_id:
                 return f"Tenant {tenant_id} chưa có phòng - không thể tạo ticket."
             
@@ -203,19 +203,14 @@ async def create_maintenance_ticket(
                         return "Hệ thống đang quá tải khi tạo mã phiếu (trùng lặp). Vui lòng thử lại sau."
                     continue
             
-            # Log behavior
             await _log_behavior(
                 tenant_id, "maintenance_request",
                 f"Created ticket {ticket_code}: {issue[:100]}",
                 {"ticket_id": ticket_id, "category": category, "priority": priority}
             )
             
-            # Map priority to text
             priority_text = {
-                'low': 'Thấp',
-                'normal': 'Bình thường',
-                'high': 'Cao',
-                'urgent': 'Khẩn cấp',
+                'low': 'Thấp', 'normal': 'Bình thường', 'high': 'Cao', 'urgent': 'Khẩn cấp',
             }.get(priority, priority)
             
             return (
@@ -292,20 +287,24 @@ async def send_payment_reminder(
 # ============ Tool 5: schedule_room_viewing ============
 
 class ScheduleRoomViewingInput(BaseModel):
-    tenant_id: int = Field(..., description="ID khách thuê")
-    room_id: int = Field(..., description="ID phòng muốn xem")
+    room_number: str = Field(..., description="Số phòng muốn xem (vd: 202, 103)")
     datetime_str: str = Field(..., description="Thời gian hẹn, format YYYY-MM-DD HH:MM")
 
 
 @tool(args_schema=ScheduleRoomViewingInput)
-async def schedule_room_viewing(tenant_id: int, room_id: int, datetime_str: str) -> str:
+async def schedule_room_viewing(room_number: str, datetime_str: str) -> str:
     """
     Đặt lịch xem phòng cho khách.
+    Tenant ID tự động lấy từ context hệ thống.
     """
-    from ..core import get_db_pool
+    from ..core import get_db_pool, current_tenant_id
     
     try:
         from datetime import datetime
+        tenant_id = current_tenant_id.get()
+        if not tenant_id:
+            return "Không xác định được thông tin khách thuê."
+        
         scheduled_dt = datetime.strptime(datetime_str, "%Y-%m-%d %H:%M")
 
         if scheduled_dt < datetime.now():
@@ -313,21 +312,20 @@ async def schedule_room_viewing(tenant_id: int, room_id: int, datetime_str: str)
 
         pool = get_db_pool()
         async with pool.acquire() as conn:
-            # Lấy thông tin
             tenant = await conn.fetchrow(
                 "SELECT full_name, phone_number FROM user_profiles WHERE tenant_id = $1",
                 tenant_id
             )
             room = await conn.fetchrow(
-                "SELECT room_number, floor, monthly_rent, status FROM rooms WHERE room_id = $1",
-                room_id
+                "SELECT room_id, room_number, floor, monthly_rent, status FROM rooms WHERE room_number = $1",
+                room_number
             )
 
             if not tenant or not room:
                 return "Không tìm thấy thông tin tenant hoặc phòng."
 
             if room['room_number'] is None:
-                return f"Phòng {room_id} không tồn tại."
+                return f"Phòng {room_number} không tồn tại."
 
             if room['status'] not in ['available', 'vacant']:
                 return f"Phòng {room['room_number']} đang ở trạng thái '{room['status']}', không thể đặt lịch xem."
@@ -337,13 +335,13 @@ async def schedule_room_viewing(tenant_id: int, room_id: int, datetime_str: str)
                 INSERT INTO appointments (tenant_id, room_id, scheduled_at, status)
                 VALUES ($1, $2, $3, 'pending')
                 RETURNING appointment_id
-            """, tenant_id, room_id, scheduled_dt)
+            """, tenant_id, room['room_id'], scheduled_dt)
 
         # Log behavior
         await _log_behavior(
             tenant_id, "room_viewing_scheduled",
             f"Xem phòng {room['room_number']} lúc {datetime_str}",
-            {"room_id": room_id, "datetime": datetime_str, "appointment_id": appointment_id}
+            {"room_id": room['room_id'], "datetime": datetime_str, "appointment_id": appointment_id}
         )
 
         return (
@@ -365,24 +363,27 @@ async def schedule_room_viewing(tenant_id: int, room_id: int, datetime_str: str)
 # ============ Tool 6: update_user_preference (Hierarchical Memory) ============
 
 class UpdateUserPreferenceInput(BaseModel):
-    tenant_id: int = Field(..., description="ID khách thuê")
     category: str = Field("preferences", description="Phân loại: demographics, personality_traits, preferences, hoặc interaction_patterns")
     preference_key: str = Field(..., description="Key cần cập nhật (ví dụ: communication_tone, active_hours, occupation)")
     preference_value: str = Field(..., description="Giá trị mới")
 
 @tool(args_schema=UpdateUserPreferenceInput)
-async def update_user_preference(tenant_id: int, category: str, preference_key: str, preference_value: str) -> str:
+async def update_user_preference(category: str, preference_key: str, preference_value: str) -> str:
     """
     Cập nhật trực tiếp một sở thích/thói quen của khách thuê vào Core Memory (personalization_profile).
     Dùng khi khách có yêu cầu rõ ràng như "từ nay hãy xưng em với tôi", "đừng nhắn tôi buổi sáng".
+    Tenant ID tự động lấy từ context hệ thống.
     """
-    from ..core import get_db_pool
+    from ..core import get_db_pool, current_tenant_id
     import json
     
     try:
+        tenant_id = current_tenant_id.get()
+        if not tenant_id:
+            return "Không xác định được thông tin khách thuê."
+        
         pool = get_db_pool()
         async with pool.acquire() as conn:
-            # Lấy profile hiện tại
             row = await conn.fetchrow(
                 "SELECT personalization_profile FROM user_profiles WHERE tenant_id = $1", 
                 tenant_id

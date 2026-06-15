@@ -47,55 +47,65 @@
 
 
 
+
+
 ---
 
 ## Kết quả hội thoại thực tế
-*Chạy lúc: 2026-06-15 00:31:19*
+*Chạy lúc: 2026-06-15 09:54:35*
 
 **Turn 1**
 - **Câu hỏi**: "Anh quản lý ơi, hồi trước em có nói muốn chuyển lên phòng có ban công, nay em hỏi lại lần nữa. Phòng 201 em ở thấy ổn nhưng thiếu ban công, quần áo phơi trong phòng ẩm quá. Bên mình còn phòng trống nào có ban công không em lên luôn?"
-- **Câu trả lời của AI**: Chào anh Tuấn, em rất hiểu sự bất tiện của anh khi phòng không có ban công khiến việc phơi đồ khó khăn.
+- **Câu trả lời của AI**: Chào anh Tuấn, em rất hiểu sự bất tiện khi phòng thiếu ban công khiến quần áo bị ẩm.
 
-Dựa trên nhu cầu của anh, hiện tại bên em đang có 2 phòng trống có ban công phù hợp để anh chuyển sang đây ạ:
+Em vừa kiểm tra danh sách phòng trống hiện tại, hiện chỉ có **phòng 202** là có ban công thôi ạ. Thông tin chi tiết phòng 202 như sau:
+*   **Tầng:** 2
+*   **Diện tích:** 28m²
+*   **Giá thuê:** 4,000,000đ/tháng
+*   **Tiện nghi:** Có ban công, giường, bàn bếp, cửa sổ, nóng lạnh, điều hòa, tủ quần áo.
 
-1.  **Phòng 203 (Tầng 2):** Diện tích 22m², giá thuê 3.200.000đ/tháng.
-2.  **Phòng 202 (Tầng 2):** Diện tích 28m², giá thuê 4.000.000đ/tháng.
-
-Anh xem qua thông tin này, nếu muốn ghé xem thực tế phòng nào thì báo em để em sắp xếp lịch cho anh nhé!
+Các phòng còn lại (103, 203, 303) hiện tại không có ban công anh ạ. Nếu anh quan tâm đến phòng 202, anh có muốn qua xem trực tiếp không ạ? Em sẽ sắp xếp lịch cho anh nhé!
 
 **Turn 2**
 - **Câu hỏi**: "Phòng 202 giá 4tr cao hơn phòng em đang ở 800k nhỉ. Nhưng 28m² rộng hơn, có ban công rộng, hướng nam thì chắc thoáng. Em hỏi tí: tiền chênh lệch tính thế nào? Em có phải đóng cọc thêm không? Có mất phí chuyển phòng không?"
-- **Câu trả lời của AI**: Chào anh Tuấn, em xin giải đáp các thắc mắc của anh về việc chuyển sang phòng 202 như sau ạ:
+- **Câu trả lời của AI**: Chào anh Tuấn, em đã kiểm tra thông tin về phòng 202 và chính sách chuyển phòng để giải đáp thắc mắc cho anh đây ạ:
 
-1. **Về tiền chênh lệch:**
-   - Theo quy định, khi anh chuyển phòng, tiền chênh lệch giá thuê sẽ được tính bắt đầu từ ngày anh chính thức chuyển sang phòng mới. Vì phòng 202 có giá 4.000.000đ/tháng, phần chênh lệch sẽ được điều chỉnh trong hóa đơn tháng đó dựa trên số ngày thực tế anh ở tại phòng mới.
+1. **Về tiền chênh lệch:** Đúng là phòng 202 có giá 4.000.000đ/tháng, cao hơn phòng 201 anh đang ở là 800.000đ. Theo quy định, giá phòng mới sẽ được áp dụng từ ngày anh chính thức chuyển sang phòng 202.
+2. **Về tiền cọc:** Khi chuyển sang phòng có giá thuê cao hơn, anh sẽ cần thực hiện bù trừ chênh lệch tiền cọc (nếu có) để đảm bảo đúng với giá trị cọc của phòng mới theo hợp đồng.
+3. **Về phí chuyển phòng:** 
+   - Nếu đây là lần đầu tiên anh chuyển phòng trong hợp đồng, bên em sẽ **miễn phí** hoàn toàn phí chuyển phòng.
+   - Từ lần thứ 2 trở đi, phí chuyển sẽ là 200.000đ/lần (bao gồm chi phí vệ sinh và sửa chữa nhỏ).
 
-2. **Về phí chuyển phòng:**
-   - Nếu đây là lần đầu tiên anh thực hiện chuyển phòng trong thời hạn hợp đồng, bên em sẽ **MIỄN PHÍ** chuyển phòng cho anh ạ. (Từ lần thứ 2 trở đi mới phát sinh phí 200.000đ/lần).
+Vì phòng 202 có diện tích 28m² và có ban công hướng Nam như anh nhận xét thì rất thoáng mát, rất phù hợp nếu anh muốn nâng cấp không gian sống. Anh cần lưu ý báo trước cho bên em **tối thiểu 7 ngày** trước khi chuyển để em làm thủ tục và chuẩn bị phòng cho anh nhé.
 
-3. **Về tiền cọc:**
-   - Khi chuyển phòng, chúng ta sẽ thực hiện ký phụ lục hợp đồng. Vì giá thuê phòng 202 cao hơn, thông thường sẽ cần điều chỉnh khoản tiền cọc để đảm bảo đúng với giá trị hợp đồng mới. Em sẽ kiểm tra lại số tiền cọc hiện tại của anh và thông báo cụ thể xem anh có cần đóng thêm phần chênh lệch hay không ngay khi anh quyết định chuyển ạ.
-
-Phòng 202 đúng là rất thoáng và rộng rãi, rất phù hợp nếu anh muốn không gian thoải mái hơn. Nếu anh muốn chốt chuyển, anh cho em biết để em làm thủ tục phụ lục hợp đồng cho mình nhé!
+Anh có muốn em đặt lịch cho anh qua xem trực tiếp phòng 202 không ạ?
 
 **Turn 3**
 - **Câu hỏi**: "Dạ em muốn qua xem phòng 202 một lần trước khi quyết định. Tầm chiều mai em rảnh sau 5h. Anh sắp xếp cho em xem được không ạ? Nếu ưng em chuyển luôn trong tuần."
-- **Câu trả lời của AI**: Hệ thống đang xử lý yêu cầu phức tạp. Vui lòng liên hệ trực tiếp quản lý qua số ${LANDLORD_PHONE:-0901.234.567} để được hỗ trợ nhanh nhất.
+- **Câu trả lời của AI**: Chào anh Tuấn, em đã ghi nhận yêu cầu xem phòng 202 của anh vào lúc 17:00 chiều mai (16/06/2026) rồi ạ.
+
+Hiện tại, lịch hẹn đã được gửi đến bộ phận quản lý để xác nhận. Quản lý sẽ liên hệ với anh sớm để chốt lịch chính thức nhé. Anh yên tâm, nếu anh ưng ý và muốn chuyển phòng, bên em sẽ hỗ trợ thủ tục nhanh gọn nhất cho anh ạ.
+
+Anh cần hỗ trợ thêm thông tin gì về phòng 202 không ạ?
 
 **Turn 4**
 - **Câu hỏi**: "Cảm ơn anh. Nếu em ưng phòng 202 thì thủ tục chuyển ra sao? Em có cần ký hợp đồng mới không? Hay chỉ cần phụ lục điều chỉnh? Và chuyển xong trong ngày được không ạ?"
-- **Câu trả lời của AI**: Chào anh Tuấn, em đã kiểm tra thông tin phòng 202 và quy định về việc chuyển phòng để hỗ trợ anh đây ạ.
+- **Câu trả lời của AI**: Chào anh Tuấn, em đã kiểm tra thông tin về phòng 202 và quy định chuyển phòng để hỗ trợ anh đây ạ:
 
-Về các thắc mắc của anh, em xin giải đáp như sau:
+**1. Về thủ tục chuyển phòng:**
+Theo quy định của tòa nhà, khi anh muốn chuyển sang phòng 202, quy trình sẽ bao gồm các bước sau:
+*   Anh gửi yêu cầu chính thức (em đã ghi nhận yêu cầu của anh).
+*   Chúng ta sẽ chốt ngày chuyển và thực hiện **ký phụ lục hợp đồng** (không cần ký lại hợp đồng mới hoàn toàn) để cập nhật thông tin phòng và giá thuê mới.
+*   Anh sẽ thực hiện bàn giao phòng cũ và nhận chìa khóa phòng 202.
 
-1. **Thủ tục chuyển phòng:** Anh chỉ cần gửi yêu cầu xác nhận chuyển phòng cho em. Sau đó, chúng ta sẽ thực hiện ký **Phụ lục hợp đồng** để cập nhật thông tin phòng mới và giá thuê mới, thay vì phải ký lại toàn bộ hợp đồng từ đầu.
-2. **Chi phí:** Vì đây là lần đầu anh chuyển phòng, nên anh sẽ được **MIỄN PHÍ** chuyển phòng ạ.
-3. **Thời gian chuyển:** Theo quy trình, chúng ta cần chốt ngày chuyển (thường ưu tiên vào đầu tháng để thuận tiện cho việc tính toán hóa đơn). Việc chuyển trong ngày hoàn toàn có thể thực hiện được sau khi đã hoàn tất ký phụ lục và bàn giao chìa khóa.
+**2. Về thời gian chuyển:**
+*   Theo quy định, anh cần báo trước tối thiểu **7 ngày** để Ban quản lý chuẩn bị phòng và làm thủ tục.
+*   Việc chuyển trong ngày thường chỉ áp dụng cho các trường hợp khẩn cấp. Do đó, để thuận tiện nhất cho anh, chúng ta nên lên kế hoạch chuyển sau 7 ngày kể từ khi chốt lịch anh nhé.
 
-**Thông tin phòng 202 để anh tham khảo:**
+**Thông tin phòng 202 cho anh tham khảo:**
 *   **Diện tích:** 28m²
 *   **Giá thuê:** 4,000,000đ/tháng
 *   **Tiện nghi:** Ban công, Giường, Bàn bếp, Cửa sổ, Nóng lạnh, Điều hòa, Tủ quần áo.
 
-Nếu anh ưng ý phòng 202, anh cho em biết để em làm thủ tục chuẩn bị phụ lục cho mình nhé!
+Anh xem xét thời gian dự kiến chuyển rồi báo lại để em làm thủ tục phụ lục hợp đồng cho mình nhé! Nếu cần xem trực tiếp phòng 202 trước khi chốt, anh cho em biết khung giờ, em sẽ sắp xếp ạ.
 

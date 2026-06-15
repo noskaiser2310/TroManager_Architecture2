@@ -1,0 +1,20 @@
+# -----------------------------------------------------------
+# TroManager — Dev/Testing dependencies (not in production)
+# -----------------------------------------------------------
+# Cài: pip install -r requirements-dev.txt
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0
+
+# Dev tools
+black>=23.0.0
+ruff>=0.1.0
+
+# Optional: llama-index RAG (nếu muốn dùng thay vì fallback)
+# llama-index>=0.10.0
+# llama-index-vector-stores-postgres>=0.0.0
+
+# Optional: Twilio SMS (nếu cần gửi SMS)
+# twilio>=8.0.0

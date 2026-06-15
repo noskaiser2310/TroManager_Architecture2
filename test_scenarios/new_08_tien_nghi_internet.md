@@ -26,30 +26,31 @@ Khách làm IT remote cần internet mạnh, phòng yên tĩnh để làm việc
 - Trả về: Thông tin internet, phòng 202 chi tiết, tổng chi phí
 
 
-
 ---
 
 ## Kết quả hội thoại thực tế
-*Chạy lúc: 2026-06-15 00:42:14*
+*Chạy lúc: 2026-06-15 09:30:57*
 
 **Turn 1**
 - **Câu hỏi**: "Hi. Tôi làm remote IT nên cần internet ổn định, tốc độ cao. Bên bạn dùng mạng gì? Bao nhiêu Mbps? Có dây LAN trong phòng không? Có thường mất mạng không? Ngoài ra phòng cần yên tĩnh, có máy lạnh. Tôi thấy phòng 202 có vẻ phù hợp — ban công rộng, máy lạnh, hướng nam. Cho tôi hỏi giá 4tr đã gồm những gì? Còn phòng 202 không?"
-- **Câu trả lời của AI**: Chào anh/chị, cảm ơn anh/chị đã quan tâm đến dịch vụ tại nhà trọ. Tôi xin giải đáp các thắc mắc của anh/chị như sau:
+- **Câu trả lời của AI**: Chào anh/chị, cảm ơn anh/chị đã quan tâm đến căn hộ của chúng tôi. Tôi xin giải đáp các thắc mắc của anh/chị như sau:
 
 ### 1. Về Internet
-*   **Nhà cung cấp:** FPT Telecom.
-*   **Băng thông:** 200Mbps (chia sẻ toàn tòa nhà).
-*   **Kết nối:** Tòa nhà sử dụng hệ thống Wifi với 2 băng tần là `TROHAIDANG_5G` và `TROHAIDANG_2.4G`. Hiện tại, các phòng không trang bị sẵn dây LAN.
-*   **Độ ổn định:** Hệ thống hoạt động ổn định cho các nhu cầu làm việc thông thường. Nếu gặp sự cố, anh/chị có thể liên hệ quản lý để được hỗ trợ kiểm tra hoặc khởi động lại router.
+Để phục vụ tốt nhất cho nhu cầu làm việc remote, mỗi phòng tại tòa nhà đều được trang bị hệ thống internet riêng biệt:
+*   **Tốc độ:** Băng thông riêng **200 Mbps** cho mỗi phòng (không chia sẻ với các phòng khác).
+*   **Kết nối:** Mỗi phòng được trang bị 1 router riêng (tên mạng: `PHONG_202_Wifi`). Anh/chị có thể kết nối qua Wi-Fi hoặc sử dụng trực tiếp **dây LAN** cắm từ router trong phòng.
+*   **Độ ổn định:** Hệ thống được cung cấp bởi FPT Telecom. Nếu gặp sự cố về tốc độ (dưới 50 Mbps) hoặc đèn router không sáng, anh/chị có thể báo ngay cho Ban quản lý để được hỗ trợ kỹ thuật kịp thời.
 
 ### 2. Về phòng 202
-*   **Tình trạng:** Hiện tại phòng 202 đang **trống (available)**.
+Hiện tại **phòng 202 vẫn còn trống**. Đây là lựa chọn rất phù hợp với nhu cầu của anh/chị:
+*   **Diện tích:** 28m² (rộng rãi, thoáng mát).
+*   **Tiện nghi:** Có sẵn ban công, điều hòa, nóng lạnh, giường, bàn bếp, tủ quần áo.
 *   **Giá thuê:** 4,000,000đ/tháng.
-*   **Chi tiết chi phí:** Giá thuê 4tr chưa bao gồm các khoản phí tiêu thụ và dịch vụ. Cụ thể:
-    *   **Điện:** 3,500đ/kWh.
-    *   **Nước:** 100,000đ/m³.
-    *   **Phí dịch vụ:** 50,000đ/tháng.
-*   **Tiện nghi:** Phòng có diện tích 28m², bao gồm ban công, điều hòa, nóng lạnh, giường, bàn bếp và tủ quần áo, rất phù hợp với nhu cầu của anh/chị.
 
-Nếu anh/chị muốn xem phòng trực tiếp, vui lòng cho tôi biết thời gian cụ thể, tôi sẽ hỗ trợ đặt lịch hẹn cho anh/chị nhé!
+**Lưu ý về chi phí:** Giá 4,000,000đ là giá thuê phòng hàng tháng. Các chi phí sử dụng thực tế bao gồm:
+*   **Điện:** 3,500đ/kWh.
+*   **Nước:** 100,000đ/m³.
+*   **Phí dịch vụ:** 50,000đ/tháng.
+
+Nếu anh/chị muốn xem phòng trực tiếp, vui lòng cho tôi biết thời gian cụ thể, tôi sẽ đặt lịch hẹn cho anh/chị nhé!
 

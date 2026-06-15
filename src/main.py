@@ -195,11 +195,11 @@ async def lifespan(app: FastAPI):
 
     async def _create_pool():
         return await asyncpg.create_pool(
-            host=db_cfg.get("host", "localhost"),
-            port=db_cfg.get("port", 5432),
-            database=db_cfg.get("name", "tromanager"),
-            user=db_cfg.get("user", "postgres"),
-            password=os.environ.get("DB_PASSWORD", db_cfg.get("password", "")),
+            host=os.environ.get("DB_HOST") or db_cfg.get("host", "localhost"),
+            port=int(os.environ.get("DB_PORT") or db_cfg.get("port", 5432)),
+            database=os.environ.get("DB_NAME") or db_cfg.get("name", "tromanager"),
+            user=os.environ.get("DB_USER") or db_cfg.get("user", "postgres"),
+            password=os.environ.get("DB_PASSWORD") or db_cfg.get("password", ""),
             min_size=2,
             max_size=db_cfg.get("pool_size", 10),
         )
@@ -788,6 +788,10 @@ async def _process_chat(request: ChatRequest, session_id: str) -> ChatResponse:
         except Exception as e:
             logger.warning(f"Failed to save conversation turn: {e}")
 
+    # Schedule persona optimization 5h after last message (per-tenant, tiết kiệm token)
+    if container.cron_scheduler and request.tenant_id:
+        container.cron_scheduler.schedule_persona_update(request.tenant_id, delay_seconds=30)
+
     return ChatResponse(
         answer=response_answer,
         system_used=system_used,
@@ -1208,6 +1212,23 @@ async def trigger_persona():
         return {"status": "success", "message": "Persona optimizer job executed"}
     except Exception as e:
         logger.error(f"Error triggering persona: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/debug/optimize-persona/{tenant_id}")
+async def optimize_persona_now(tenant_id: int):
+    """Debug: trigger persona optimization for a specific tenant immediately"""
+    try:
+        optimizer = container.persona_optimizer
+        if not optimizer:
+            raise HTTPException(status_code=500, detail="PersonaOptimizer not initialized")
+        profile = await optimizer.optimize_tenant_profile(tenant_id)
+        return {
+            "status": "success",
+            "message": f"Persona optimization {'completed' if profile else 'skipped (no recent convos)'} for tenant {tenant_id}",
+            "updated": profile is not None
+        }
+    except Exception as e:
+        logger.error(f"Error optimizing persona for tenant {tenant_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/debug/trigger-invoice-cron")
